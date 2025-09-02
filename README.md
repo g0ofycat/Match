@@ -1,0 +1,25 @@
+# Match (Roblox)
+
+A customizable matchmaking system for Roblox games. Handles queueing, grouping, ELO balancing, continent grouping, and cross-server match creation; Handles most edge cases well.
+
+## Features & Design Choices
+
+- **Queue Management (Player, Mode, Sub-Mode)**
+- **Dynamic ELO Spread Balancing with Wait-Time Expansion**
+- **Continent-Based Player Grouping**
+- **Cross-Server Match Creation via MessagingService**
+- **Teleport Handling with Retries & Backoff**
+- **Safe Player Locking/Unlocking using MemoryStore**
+
+**Example Usage:**
+
+```lua
+-- Start matchmaking loops
+Match:StartMatchmaking({"Ranked", "Casual"})
+
+-- Queue a player
+Match:QueuePlayer(player, 1200, "Ranked", "NA", "1v1")
+
+-- Stop matchmaking loops
+Match:StopMatchmaking()
+```
