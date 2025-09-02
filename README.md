@@ -24,3 +24,5 @@ Match:QueuePlayer(player, 1200, "Ranked", "1v1")
 -- Stop matchmaking loops
 Match:StopMatchmaking()
 ```
+
+*PR's are welcome, let me know if you find any bugs or changes that this project can use!*
