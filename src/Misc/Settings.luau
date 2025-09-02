@@ -1,0 +1,30 @@
+local Settings = {}
+
+Settings.Matches = {
+	MATCHMAKING_DURATION = 300, -- // How long the player is in matchmaking before removing them
+	ELO_CHANGE = 200, -- // How close ELO can be for matchmaking
+	ELO_INCREASE_RATE = 50, -- // Higher ELO people may not be put in any matches. Finds more people in range every loop so they can be matchmaked
+	CHECK_MATCHMAKING_INTERVALS = 5, -- // How fast to check for matches
+	BATCH_SIZE = 50, -- // The Batch of the amount of keys fetched from the MemoryStore
+	CACHE_CLEANUP_INTERVAL = 300, -- // How fast cached data gets cleaned up
+	CROSS_SERVER_DATA_TTL = 120, -- // The Lifetime for the cross server data
+	PRIORITIZE_WAIT_TIME = true, -- // When Continent Matchmaking fails, Matchmaking will be faster for people who have waited longer instead of people with closer ELO
+	LOCK_TIMEOUT = 10, -- // How long 'Locking' lives before being removed. Locking is a state that tells servers that the player is in the match so the edge case where 2 servers try to match make someone that is going to / is in a match
+	TELEPORT_RETRIES = 3 -- // How many times the game tries to teleport you on fail
+}
+
+Settings.Information = {
+	PLACE_ID = game.PlaceId, -- // The Place ID of where you want the player to go when they're matchmaked
+	SERVER_ID = game.JobId
+}
+
+Settings.Modes = {"Casual", "Ranked"} -- // Modes act like parents to MODE_CONFIG
+
+Settings.MODE_CONFIG = { -- // Names of mode, totalPlayers is how many players can be in that mode. All MODE_CONFIG are in each Modes
+	["1v1"] = { totalPlayers = 2 },
+	["2v2"] = { totalPlayers = 4 },
+	["3v3"] = { totalPlayers = 6 },
+	["4v4"] = { totalPlayers = 8 },
+}
+
+return Settings
