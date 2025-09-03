@@ -6,7 +6,6 @@ local Match = {}
 -- // SERVICES
 --=========================
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MemoryStoreService = game:GetService("MemoryStoreService")
 local MessagingService = game:GetService("MessagingService")
 local HttpService = game:GetService("HttpService")
@@ -39,7 +38,7 @@ Match.Data = {
 
 Match.Modules = {
 	Settings = require(script.Parent.Misc.Settings), -- // Handles all of the core information like modes, subModes, etc
-	PlayerLocation = require(script.Parent.Misc.PlayerLocation)
+	PlayerLocation = require(script.Parent.Misc.PlayerLocation) -- // Uses LocalizationService to get a player by their Continent
 }
 
 --=========================
@@ -52,7 +51,7 @@ Match.Modules = {
 -- @return MemoryStoreSortedMap
 local function getQueue(mode: string, subMode: string): MemoryStoreSortedMap
 	local queueKey = mode .. "_" .. subMode
-	
+
 	if not Match.Data.queueCache[queueKey] then
 		Match.Data.queueCache[queueKey] = {
 			queue = MemoryStoreService:GetSortedMap("MatchQueue_" .. queueKey),
@@ -61,7 +60,7 @@ local function getQueue(mode: string, subMode: string): MemoryStoreSortedMap
 	else
 		Match.Data.queueCache[queueKey].lastUsed = tick()
 	end
-	
+
 	return Match.Data.queueCache[queueKey].queue
 end
 
@@ -78,12 +77,12 @@ end
 -- @param subMode: The subMode
 -- @return number: totalPlayers
 local function getMatchSize(subMode: string): number
-	if Match.Modules.Settings.MODE_CONFIG[subMode] then
-		return Match.Modules.Settings.MODE_CONFIG[subMode].totalPlayers
+	if Match.Modules.Settings.SubModes[subMode] then
+		return Match.Modules.Settings.SubModes[subMode].totalPlayers
 	end
 
 	warn("Unknown subMode:", subMode, "- using default size of 2")
-	
+
 	return 2
 end
 
@@ -690,10 +689,13 @@ end
 
 -- QueuePlayer(): Queues the player(s) up into the matchmaking
 -- @param playerOrList: The player(s) to queue. Put a list of players to bulk queue them or just add one player
--- @param ELO: The amount of ELO the player has
 -- @param mode: The mode the player should be queued to (Match.Modules.Settings.Modes)
--- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.MODE_CONFIG)
-function Match:QueuePlayer(playerOrList: Player | { Player }, ELO: number, mode: string, subMode: string): ()
+-- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.SubModes)
+-- @param ELO?: Optional ELO the player has
+function Match:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, ELO: number?): ()
+	assert(Match.Modules.Settings.Modes[mode], "'mode' doesn't exist in Settings.Modes")
+	assert(Match.Modules.Settings.SubModes[subMode], "'subMode' doesn't exist in Settings.SubModes")
+
 	local players: { Player } = typeof(playerOrList) == "Instance" and { playerOrList } or playerOrList :: { Player }
 	local queueKey = mode .. "_" .. subMode
 
@@ -705,7 +707,7 @@ function Match:QueuePlayer(playerOrList: Player | { Player }, ELO: number, mode:
 		
 		local playerContinent = Match.Modules.PlayerLocation.GetPlayerContinent(player)
 		
-		local key, data = generatePlayerQueueData(player, ELO, playerContinent, subMode)
+		local key, data = generatePlayerQueueData(player, ELO or 1000, playerContinent, subMode)
 
 		if not Match.Data.playerQueueKeys[player.UserId] then
 			Match.Data.playerQueueKeys[player.UserId] = {}
@@ -771,7 +773,7 @@ end
 
 -- MatchMake(): Globally handles and checks all players elligble for Matchmaking based on their Mode and subMode and teleports them
 -- @param mode: The mode the player should be queued to (Match.Modules.Settings.Modes)
--- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.MODE_CONFIG)
+-- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.SubModes)
 function Match:MatchMake(mode: string, subMode: string): ()
 	local queueKey = mode .. "_" .. subMode
 
@@ -796,7 +798,7 @@ end
 -- @param modes: A list of mode names to run matchmaking for
 function Match:StartMatchmaking(): ()
 	for _, mode in Match.Modules.Settings.Modes do
-		for subMode, _ in Match.Modules.Settings.MODE_CONFIG do
+		for subMode, _ in Match.Modules.Settings.SubModes do
 			local thread = task.spawn(function()
 				while true do
 					task.wait(Match.Modules.Settings.Matches.CHECK_MATCHMAKING_INTERVALS)
@@ -829,8 +831,8 @@ end
 -- Cleanup(): Cleans up all caches
 function Match:Cleanup()
 	for _, connection in Match.Data.messagingConnections :: { RBXScriptConnection } do
-		pcall(function() 
-			connection:Disconnect() 
+		pcall(function()
+			connection:Disconnect()
 		end)
 	end
 
@@ -854,17 +856,18 @@ end
 -- IsPlayerQueued(): Checks if a player is queued in a certain subMode's mode
 -- @param player: The player to check
 -- @param mode: The mode the player should be queued to (Match.Modules.Settings.Modes)
--- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.MODE_CONFIG)
+-- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.SubModes)
 -- @return boolean: If the player is queued or not
 function Match:IsPlayerQueued(player: Player, mode: string?, subMode: string?): boolean
 	local queues = Match.Data.playerQueueKeys[player.UserId]
 	
-	if not queues then 
-		return false 
+	if not queues then
+		return false
 	end
 
 	if mode and subMode then
 		local key = mode .. "_" .. subMode
+
 		return queues[key] ~= nil
 	end
 
@@ -873,7 +876,7 @@ end
 
 -- GetQueuedPlayers(): Get all of the queued players in a subMode's mode
 -- @param mode: The mode the player should be queued to (Match.Modules.Settings.Modes)
--- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.MODE_CONFIG)
+-- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.SubModes)
 -- @return { number }: A list of UserIds of the queued players
 function Match:GetQueuedPlayers(mode: string, subMode: string): { number }
 	local players = {}
@@ -897,7 +900,7 @@ end
 -- GetPlayerJoinTime(): Gets the players join time in a subMode's mode
 -- @param player: The player to check
 -- @param mode: The mode the player should be queued to (Match.Modules.Settings.Modes)
--- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.MODE_CONFIG)
+-- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.SubModes)
 -- @return number?: The join time of the player if found, otherwise nil
 function Match:GetPlayerJoinTime(player: Player, mode: string, subMode: string): number?
 	local queueKey = mode .. "_" .. subMode
@@ -920,10 +923,11 @@ end
 
 -- GetQueueCount(): Gets the local queue count in a subMode's mode
 -- @param mode: The mode the player should be queued to (Match.Modules.Settings.Modes)
--- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.MODE_CONFIG)
+-- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.SubModes)
 -- @return number: The total number of players in the queue
 function Match:GetQueueCount(mode: string, subMode: string): number
 	local key = mode .. "_" .. subMode
+
 	return Match.Data.localQueueCounts[key] or 0
 end
 

@@ -1,6 +1,6 @@
 # Match (Roblox)
 
-A customizable matchmaking system for Roblox games. Handles queueing, grouping, ELO balancing, continent grouping, and cross-server match creation; Handles edge cases well. **(NOTE: Must be used on the server)**
+A customizable matchmaking system for Roblox games with **extremely** easy-to-use API. Handles queueing, grouping, ELO balancing, continent grouping, and cross-server match creation; Handles edge cases well. **(NOTE: Must be used on the server since this uses MemoryStoreService and MessagingService)**
 
 ## Features & Design Choices
 
@@ -15,14 +15,57 @@ A customizable matchmaking system for Roblox games. Handles queueing, grouping, 
 **Example Usage:**
 
 ```lua
--- Start matchmaking loops
+-- // Start matchmaking loops
 Match:StartMatchmaking()
 
--- Queue a player (Player, ELO, Mode, SubMode)
-Match:QueuePlayer(player, 1200, "Ranked", "1v1")
+-- // Queue a player with an optional ELO parameter (Player, Mode, SubMode, ELO?)
+Match:QueuePlayer(player, "Ranked", "1v1", 1200)
 
--- Stop matchmaking loops
+-- // Bulk queue multiple players (all in the same mode/submode, optional shared ELO)
+Match:QueuePlayer({player1, player2, player3}, "Ranked", "2v2", 1300)
+
+-- // Stop the queue of a player
+Match:StopQueue(player)
+
+-- // Stop matchmaking loops
 Match:StopMatchmaking()
 ```
+
+# Settings (How to use)
+
+```lua
+local Settings = {}
+
+Settings.Matches = {
+	MATCHMAKING_DURATION = 300, -- // How long the player is in matchmaking before removing them
+	ELO_CHANGE = 200, -- // How close ELO can be for matchmaking
+	ELO_INCREASE_RATE = 50, -- // Higher ELO people may not be put in any matches. Finds more people in range every loop so they can be matchmaked
+	CHECK_MATCHMAKING_INTERVALS = 5, -- // How fast to check for matches
+	BATCH_SIZE = 50, -- // The Batch of the amount of keys fetched from the MemoryStore
+	CACHE_CLEANUP_INTERVAL = 300, -- // How fast cached data gets cleaned up
+	CROSS_SERVER_DATA_TTL = 120, -- // The Lifetime for the cross server data
+	PRIORITIZE_WAIT_TIME = true, -- // When Continent Matchmaking fails, Matchmaking will be faster for people who have waited longer instead of people with closer ELO
+	LOCK_TIMEOUT = 10, -- // How long 'Locking' lives before being removed. Locking is a state that tells servers that the player is in the match so the edge case where 2 servers try to match make someone that is going to / is in a match
+	TELEPORT_RETRIES = 3 -- // How many times the game tries to teleport you on fail
+}
+
+Settings.Information = {
+	PLACE_ID = game.PlaceId, -- // The Place ID of where you want the player to go when they're matchmaked
+	SERVER_ID = game.JobId
+}
+
+Settings.Modes = {"Casual", "Ranked"} -- // Modes act like parents to SubModes
+
+Settings.SubModes = { -- // Names of mode, totalPlayers is how many players can be in that mode. All SubModes are in each Modes
+	["1v1"] = { totalPlayers = 2 },
+	["2v2"] = { totalPlayers = 4 },
+	["3v3"] = { totalPlayers = 6 },
+	["4v4"] = { totalPlayers = 8 },
+}
+
+return Settings
+```
+
+Most of the *Settings* are self explanitory, this section will mostly be about **Modes** and **SubModes**. You can create new modes by adding their name to **Settings.SubModes**, each mode will have all SubModes inside of them. SubModes are self explanitory, the key is the name of the SubMode and they hold a table which holds a **totalPlayers** variable which will see how many players can be in 1 match. *(e.x. 1v1 has 2 'totalPlayers' since it's a player versus a player)*. **(NOTE: Each Mode and SubMode has a seperate MemoryStoreSortedMap which would look something like: MatchQueue_Casual_1v1)**
 
 *PR's are welcome, let me know if you find any bugs or changes that this project can use!*

@@ -18,9 +18,9 @@ Settings.Information = {
 	SERVER_ID = game.JobId
 }
 
-Settings.Modes = {"Casual", "Ranked"} -- // Modes act like parents to MODE_CONFIG
+Settings.Modes = {"Casual", "Ranked"} -- // Modes act like parents to SubModes
 
-Settings.MODE_CONFIG = { -- // Names of mode, totalPlayers is how many players can be in that mode. All MODE_CONFIG are in each Modes
+Settings.SubModes = { -- // Names of mode, totalPlayers is how many players can be in that mode. All SubModes are in each Modes
 	["1v1"] = { totalPlayers = 2 },
 	["2v2"] = { totalPlayers = 4 },
 	["3v3"] = { totalPlayers = 6 },
