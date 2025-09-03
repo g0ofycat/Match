@@ -23,10 +23,10 @@ Match.Data = {
 	isProcessingMatch = {}, -- // Stores booleans for each player
 	crossServerData = {}, -- // Stored data from other servers
 	matchmakingTasks = {}, -- // Stores all current loops for matchmaking
-	
+
 	queueCache = {}, -- // Stores Match Queue Maps
 	messagingConnections = {}, -- // All of the connections used from MessagingService
-	
+
 	lastCacheCleanup = 0,
 	heartbeatConnection = nil,
 	_lockMap = nil :: MemoryStoreSortedMap? -- // Stores the 'MatchLocks' MemoryStoreSortedMap
@@ -122,7 +122,7 @@ end
 function generatePlayerQueueData(player: Player, ELO: number, continent: string, subMode: string): (string, string)
 	local timestamp = math.floor(tick() * 1000)
 	local key = string.format("%010d", timestamp) .. "_" .. tostring(player.UserId)
-	
+
 	local data = {
 		UserId = player.UserId,
 		ELO = ELO,

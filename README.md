@@ -10,7 +10,7 @@ A customizable matchmaking system for Roblox games with **extremely** easy-to-us
 - **Cross-Server Match Creation via MessagingService**
 - **Teleport Handling with Retries & Backoff**
 - **Safe Player Locking / Unlocking using MemoryStore**
-- **Everything is customizable in Settings.luau**
+- **Everything is customizable (Check Settings.luau)**
 
 **Example Usage:**
 
@@ -26,6 +26,9 @@ Match:QueuePlayer({player1, player2, player3}, "Ranked", "2v2", 1300)
 
 -- // Stop the queue of a player
 Match:StopQueue(player)
+
+-- // Bulk stop the queue of multiple players
+Match:StopQueue({player1, player2, player3})
 
 -- // Stop matchmaking loops
 Match:StopMatchmaking()
