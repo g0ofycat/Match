@@ -693,7 +693,7 @@ end
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.SubModes)
 -- @param ELO?: Optional ELO the player has
 function Match:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, ELO: number?): ()
-	assert(Match.Modules.Settings.Modes[mode], "'mode' doesn't exist in Settings.Modes")
+	assert(table.find(Match.Modules.Settings.Modes, mode), "'mode' doesn't exist in Settings.Modes")
 	assert(Match.Modules.Settings.SubModes[subMode], "'subMode' doesn't exist in Settings.SubModes")
 
 	local players: { Player } = typeof(playerOrList) == "Instance" and { playerOrList } or playerOrList :: { Player }
