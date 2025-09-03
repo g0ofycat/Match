@@ -81,7 +81,7 @@ local function getMatchSize(subMode: string): number
 	if Match.Modules.Settings.MODE_CONFIG[subMode] then
 		return Match.Modules.Settings.MODE_CONFIG[subMode].totalPlayers
 	end
-	
+
 	warn("Unknown subMode:", subMode, "- using default size of 2")
 	
 	return 2
@@ -119,8 +119,8 @@ end
 -- @param ELO: The ELO of the player
 -- @param continent: The Continent of the player (Use PlayerLocation)
 -- @param subMode: The subMode
--- @return timestamp, key, HttpService:JSONEncode(data)
-function generatePlayerQueueData(player: Player, ELO: number, continent: string, subMode: string): (number, string, string)
+-- @return key, HttpService:JSONEncode(data)
+function generatePlayerQueueData(player: Player, ELO: number, continent: string, subMode: string): (string, string)
 	local timestamp = math.floor(tick() * 1000)
 	local key = string.format("%010d", timestamp) .. "_" .. tostring(player.UserId)
 	
@@ -133,7 +133,7 @@ function generatePlayerQueueData(player: Player, ELO: number, continent: string,
 		SubMode = subMode
 	}
 	
-	return timestamp, key, HttpService:JSONEncode(data)
+	return key, HttpService:JSONEncode(data)
 end
 
 --=========================
@@ -705,7 +705,7 @@ function Match:QueuePlayer(playerOrList: Player | { Player }, ELO: number, mode:
 		
 		local playerContinent = Match.Modules.PlayerLocation.GetPlayerContinent(player)
 		
-		local timestamp, key, data = generatePlayerQueueData(player, ELO, playerContinent, subMode)
+		local key, data = generatePlayerQueueData(player, ELO, playerContinent, subMode)
 
 		if not Match.Data.playerQueueKeys[player.UserId] then
 			Match.Data.playerQueueKeys[player.UserId] = {}
