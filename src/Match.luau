@@ -174,7 +174,7 @@ local function setupMessagingService(): ()
 		Match.Data.messagingConnections.matchmakingRequest = connection
 	end
 
-	success, connection = pcall(function() -- // Teleports all affected players to 1 Private Servers
+	success, connection = pcall(function() -- // Teleports all affected players to 1 Private Server
 		return MessagingService:SubscribeAsync("CrossServerTeleport", function(message)
 			local data = message.Data
 			if data.PlayersForServer and data.PlayersForServer[Match.Modules.Settings.Information.SERVER_ID] then
@@ -719,7 +719,7 @@ function Match:QueuePlayer(playerOrList: Player | { Player }, mode: string, subM
 		
 		local playerContinent = Match.Modules.PlayerLocation.GetPlayerContinent(player)
 		
-		local key, data = generatePlayerQueueData(player, ELO or 1000, playerContinent, subMode)
+		local key, data = generatePlayerQueueData(player, ELO or 0, playerContinent, subMode)
 
 		if not Match.Data.playerQueueKeys[player.UserId] then
 			Match.Data.playerQueueKeys[player.UserId] = {}
