@@ -15,6 +15,82 @@
 local Match = {}
 
 --=========================
+-- // TYPES
+--=========================
+
+export type PlayerQueueData = {
+	UserId: number,
+	ELO: number,
+	JoinTime: number,
+	ServerId: string,
+	Continent: string,
+	SubMode: string
+}
+
+export type QueueStatusResponseData = {
+    Mode: string,
+    SubMode: string,
+    TargetServer: string,
+    SendingServer: string,
+    Players: { CrossServerPlayer },
+    PlayerCount: number,
+    Timestamp: number
+}
+
+export type ParsedPlayerData = {
+	UserId: number,
+	ELO: number,
+	JoinTime: number,
+	QueueKey: string,
+	ServerId: string,
+	Continent: string
+}
+
+export type QueueCacheEntry = {
+	queue: MemoryStoreSortedMap,
+	lastUsed: number
+}
+
+export type CrossServerPlayer = {
+	UserId: number,
+	ELO: number,
+	JoinTime: number,
+	QueueKey: string
+}
+
+export type CrossServerData = {
+	Players: { CrossServerPlayer },
+	Timestamp: number
+}
+
+export type TeleportRequestData = {
+    MatchId: string,
+    ServerCode: string,
+    PlaceId: number,
+    PlayersForServer: { [string]: { number } },
+    Mode: string,
+    SubMode: string,
+    Timestamp: number
+}
+
+export type MatchData = {
+	playerQueueKeys: { [number]: { [string]: string } }, -- // UserId -> QueueKey -> MemoryStore Key
+	localQueueCounts: { [string]: number }, -- // QueueKey -> Count
+	isProcessingMatch: { [string]: boolean }, -- // QueueKey -> Processing Status
+
+	crossServerData: { [string]: { [string]: CrossServerData } }, -- // QueueKey -> ServerId -> Data
+
+	matchmakingTasks: { [string]: thread }, -- // QueueKey -> Thread
+
+	queueCache: { [string]: QueueCacheEntry }, -- // QueueKey -> Cache Entry
+	messagingConnections: { [string]: RBXScriptConnection }, -- // Handler Key -> Connection
+
+	lastCacheCleanup: number,
+	heartbeatConnection: RBXScriptConnection?,
+	_lockMap: MemoryStoreSortedMap? -- // Cached lock map
+}
+
+--=========================
 -- // SERVICES
 --=========================
 
@@ -42,15 +118,15 @@ Match.Data = {
 	lastCacheCleanup = 0,
 	heartbeatConnection = nil,
 	_lockMap = nil :: MemoryStoreSortedMap? -- // Stores the 'MatchLocks' MemoryStoreSortedMap
-}
+} :: MatchData
 
 --=========================
 -- // MODULES
 --=========================
 
 Match.Modules = {
-	Settings = require(script.Parent.Misc.Settings), -- // Handles all of the core information like modes, subModes, etc
-	PlayerLocation = require(script.Parent.Misc.PlayerLocation) -- // Uses LocalizationService to get a player by their Continent
+	Settings = require(script.Parent.Modules.Misc.Settings), -- // Handles all of the core information like modes, subModes, etc
+	PlayerLocation = require(script.Parent.Modules.Misc.PlayerLocation) -- // Uses LocalizationService to get a player by their Continent
 }
 
 --=========================
@@ -85,7 +161,7 @@ local function getLockMap(): MemoryStoreSortedMap
 	return Match.Data._lockMap :: MemoryStoreSortedMap
 end
 
--- getMatchSize(): Returns the totalPlayers given the subMode
+-- getMatchSize(): Returns the total number of players required for a match in the given subMode
 -- @param subMode: The subMode
 -- @return number: totalPlayers
 local function getMatchSize(subMode: string): number
@@ -99,24 +175,30 @@ local function getMatchSize(subMode: string): number
 end
 
 -- cleanupCaches(): Cleans up all caches
-local function cleanupCaches()
+local function cleanupCaches(): ()
 	local now = tick()
 
 	for queueKey, cacheData in Match.Data.queueCache do
 		if now - cacheData.lastUsed > Match.Modules.Settings.Matches.CACHE_CLEANUP_INTERVAL then
 			Match.Data.queueCache[queueKey] = nil
-		end	
+		end
 	end
 
 	if Match.Data.crossServerData then
-		for queueKey, queueData in Match.Data.crossServerData :: { [string]: { [string]: any } } do
-			for serverId, serverData in queueData :: { [string]: any } do
+		for queueKey, queueData in Match.Data.crossServerData do
+			local expired = {}
+
+			for serverId, serverData in queueData do
 				if now - serverData.Timestamp > Match.Modules.Settings.Matches.CROSS_SERVER_DATA_TTL then
-					queueData[serverId] = nil
+					table.insert(expired, serverId)
 				end
 			end
 
-			if next(queueData) == nil then
+			for _, serverId in ipairs(expired) do
+				queueData[serverId] = nil
+			end
+
+			if not next(queueData) then
 				Match.Data.crossServerData[queueKey] = nil
 			end
 		end
@@ -126,7 +208,7 @@ local function cleanupCaches()
 end
 
 -- generatePlayerQueueData(): Returns data based on multiple parameters
--- @param player: Used for part of the 'key'
+-- @param player: The Player object to generate queue data for
 -- @param ELO: The ELO of the player
 -- @param continent: The Continent of the player (Use PlayerLocation)
 -- @param subMode: The subMode
@@ -135,7 +217,7 @@ function generatePlayerQueueData(player: Player, ELO: number, continent: string,
 	local timestamp = math.floor(tick() * 1000)
 	local key = string.format("%010d", timestamp) .. "_" .. tostring(player.UserId)
 
-	local data = {
+	local data: PlayerQueueData = {
 		UserId = player.UserId,
 		ELO = ELO,
 		JoinTime = timestamp,
@@ -143,7 +225,7 @@ function generatePlayerQueueData(player: Player, ELO: number, continent: string,
 		Continent = continent,
 		SubMode = subMode
 	}
-	
+
 	return key, HttpService:JSONEncode(data)
 end
 
@@ -153,54 +235,48 @@ end
 
 -- setupMessagingService(): Sets up the messaging service subscribers
 local function setupMessagingService(): ()
-	for _, connection in Match.Data.messagingConnections :: { RBXScriptConnection } do
-		connection:Disconnect()
+	for _, c in Match.Data.messagingConnections do
+		c:Disconnect()
 	end
 
 	Match.Data.messagingConnections = {}
 
-	local success, connection = pcall(function()
-		return MessagingService:SubscribeAsync("MatchmakingRequest", function(message) -- // Recieves the status of the current Matchmaking to all servers from the data of RequestCrossServerMatchmaking
-			local data = message.Data
-			if data.Mode and data.SubMode and data.RequestingServer ~= Match.Modules.Settings.Information.SERVER_ID then
-				task.spawn(function()
-					Match:SendQueueStatus(data.Mode, data.SubMode, data.RequestingServer)
-				end)
-			end
+	local function subscribe(channel: string, handlerKey: string, handler: ({ Data: any }) -> ()): ()
+		local ok, conn = pcall(function()
+			return MessagingService:SubscribeAsync(channel, handler)
 		end)
-	end)
-
-	if success then
-		Match.Data.messagingConnections.matchmakingRequest = connection
+		if ok then
+			Match.Data.messagingConnections[handlerKey] = conn
+		end
 	end
 
-	success, connection = pcall(function() -- // Teleports all affected players to 1 Private Server
-		return MessagingService:SubscribeAsync("CrossServerTeleport", function(message)
-			local data = message.Data
-			if data.PlayersForServer and data.PlayersForServer[Match.Modules.Settings.Information.SERVER_ID] then
-				task.spawn(function()
-					Match:HandleTeleportRequest(data)
-				end)
-			end
-		end)
+	local settings = Match.Modules.Settings
+	local serverId = settings.Information.SERVER_ID
+
+	subscribe("MatchmakingRequest", "matchmakingRequest", function(msg)
+		local d = msg.Data
+		if d.Mode and d.SubMode and d.RequestingServer ~= serverId then
+			task.spawn(function()
+				Match:SendQueueStatus(d.Mode, d.SubMode, d.RequestingServer)
+			end)
+		end
 	end)
 
-	if success then
-		Match.Data.messagingConnections.crossServerTeleport = connection
-	end
-
-	success, connection = pcall(function()
-		return MessagingService:SubscribeAsync("QueueStatusResponse", function(message)
-			local data = message.Data
-			if data.TargetServer == Match.Modules.Settings.Information.SERVER_ID then
-				Match:ReceiveQueueStatus(data)
-			end
-		end)
+	subscribe("CrossServerTeleport", "crossServerTeleport", function(msg)
+		local d = msg.Data
+		if d.PlayersForServer and d.PlayersForServer[serverId] then
+			task.spawn(function()
+				Match:HandleTeleportRequest(d)
+			end)
+		end
 	end)
 
-	if success then
-		Match.Data.messagingConnections.queueStatusResponse = connection
-	end
+	subscribe("QueueStatusResponse", "queueStatusResponse", function(msg)
+		local d = msg.Data
+		if d.TargetServer == serverId then
+			Match:ReceiveQueueStatus(d)
+		end
+	end)
 end
 
 -- RequestCrossServerMatchmaking(): A wrapper for 'MatchmakingRequest' :PublishAsync()
@@ -231,23 +307,47 @@ function Match:SendQueueStatus(mode: string, subMode: string, targetServer: stri
 		return queue:GetRangeAsync(Enum.SortDirection.Ascending, maxPlayers)
 	end)
 
-	if success and result then
-		for _, entry in result do
-			local success, data = pcall(function()
-				return HttpService:JSONDecode(entry.value)
-			end)
-			if success and data and data.ServerId == Match.Modules.Settings.Information.SERVER_ID then
-				local player = Players:GetPlayerByUserId(data.UserId)
-				if player then
-					table.insert(players, {
-						UserId = data.UserId,
-						ELO = data.ELO,
-						JoinTime = data.JoinTime,
-						QueueKey = entry.key
-					})
-				end
-			end
+	if not success or not result then
+		pcall(function()
+			MessagingService:PublishAsync("QueueStatusResponse", {
+				Mode = mode,
+				SubMode = subMode,
+				TargetServer = targetServer,
+				SendingServer = Match.Modules.Settings.Information.SERVER_ID,
+				Players = {},
+				PlayerCount = 0,
+				Timestamp = tick()
+			})
+		end)
+
+		return
+	end
+
+	for _, entry in result do
+		local dataSuccess, data = pcall(function()
+			return HttpService:JSONDecode(entry.value)
+		end)
+
+		if not dataSuccess or not data then
+			continue
 		end
+
+		if data.ServerId ~= Match.Modules.Settings.Information.SERVER_ID then
+			continue
+		end
+
+		local player = Players:GetPlayerByUserId(data.UserId)
+
+		if not player then
+			continue
+		end
+
+		table.insert(players, {
+			UserId = data.UserId,
+			ELO = data.ELO,
+			JoinTime = data.JoinTime,
+			QueueKey = entry.key
+		})
 	end
 
 	pcall(function()
@@ -264,8 +364,8 @@ function Match:SendQueueStatus(mode: string, subMode: string, targetServer: stri
 end
 
 -- ReceiveQueueStatus(): Stores the Cross Server data for MessagingService to use and broadcast to servers
--- @param data
-function Match:ReceiveQueueStatus(data: any): ()
+-- @param data: QueueStatusResponseData
+function Match:ReceiveQueueStatus(data: QueueStatusResponseData): ()
 	local queueKey = data.Mode .. "_" .. data.SubMode
 
 	if not Match.Data.crossServerData[queueKey] then
@@ -278,6 +378,7 @@ function Match:ReceiveQueueStatus(data: any): ()
 	}
 
 	local now = tick()
+
 	for serverId, serverData in Match.Data.crossServerData[queueKey] do
 		if now - serverData.Timestamp > Match.Modules.Settings.Matches.CROSS_SERVER_DATA_TTL then
 			Match.Data.crossServerData[queueKey][serverId] = nil
@@ -334,13 +435,13 @@ end
 -- @param mode: The mode to process
 -- @param subMode: The subMode of the mode
 -- @param queueKey: The key of the queue
--- @return { any }: A table storing all of the player's data
-function Match:CollectPlayers(mode: string, subMode: string, queueKey: string): { any }
+-- @return { ParsedPlayerData }
+function Match:CollectPlayers(mode: string, subMode: string, queueKey: string): { ParsedPlayerData }
 	if not Match.Data.localQueueCounts[queueKey] or Match.Data.localQueueCounts[queueKey] == 0 then
 		return {}
 	end
 
-	local allPlayers = {}
+	local allPlayers: { ParsedPlayerData } = {}
 	local queue = getQueue(mode, subMode)
 	local batchSize = math.min(200, getMatchSize(subMode) * Match.Modules.Settings.Matches.BATCH_SIZE)
 
@@ -353,7 +454,7 @@ function Match:CollectPlayers(mode: string, subMode: string, queueKey: string): 
 	if success and type(result) == "table" then
 		for _, entry in result do
 			local playerData = self:ParseQueueEntry(entry)
-			
+
 			if playerData then
 				table.insert(allPlayers, playerData)
 			end
@@ -367,8 +468,8 @@ end
 
 -- ParseQueueEntry(): Returns the JSON decoded entry safely
 -- @param entry: The entry
--- @return { UserId: number, ELO: number, JoinTime: number, QueueKey: string, ServerId: string, Continent: string } or nil if it couldn't safely get the data
-function Match:ParseQueueEntry(entry: any): { UserId: number, ELO: number, JoinTime: number, QueueKey: string, ServerId: string, Continent: string }?
+-- @return ParsedPlayerData?
+function Match:ParseQueueEntry(entry: any): ParsedPlayerData?
 	local success, data = pcall(function()
 		return HttpService:JSONDecode(entry.value)
 	end)
@@ -390,19 +491,22 @@ end
 -- FindOptimalPlayerGroup(): Finds the optimal group for the player
 -- @param allPlayers: The players to find the best group for
 -- @param subMode: The subMode
--- @return { any }?: A table of the best players to find
-function Match:FindOptimalPlayerGroup(allPlayers: { any }, subMode: string): { any }?
+-- @return { ParsedPlayerData }?
+function Match:FindOptimalPlayerGroup(allPlayers: { ParsedPlayerData }, subMode: string): { ParsedPlayerData }?
 	local matchSize = getMatchSize(subMode)
 	local continentGroups = self:GroupPlayersByContinent(allPlayers)
 
 	self:SortPlayers(allPlayers)
 
 	for continent, playersInContinent in continentGroups do
-		if #playersInContinent >= matchSize then
-			local bestGroup = self:FindBestGroup(playersInContinent, matchSize)
-			if bestGroup then
-				return bestGroup
-			end
+		if #playersInContinent < matchSize then
+			continue
+		end
+
+		local bestGroup = self:FindBestGroup(playersInContinent, matchSize)
+
+		if bestGroup then
+			return bestGroup
 		end
 	end
 
@@ -412,21 +516,21 @@ end
 -- GroupPlayersByContinent(): Groups a list of players by their continent
 -- @param players: The players to group
 -- @return { [string]: {any} }: A dictionary where keys are continent names and values are lists of players
-function Match:GroupPlayersByContinent(players: { any }): { [string]: {any} }
+function Match:GroupPlayersByContinent(players: { ParsedPlayerData }): { [string]: {any} }
 	local groups = {}
-	
+
 	for _, player in players do
 		local cont = player.Continent or "Unknown"
 		groups[cont] = groups[cont] or {}
 		table.insert(groups[cont], player)
 	end
-	
+
 	return groups
 end
 
 -- SortPlayers(): Sorts players in-place based on wait time or ELO
 -- @param players: The players to sort
-function Match:SortPlayers(players: { any }): ()
+function Match:SortPlayers(players: { ParsedPlayerData }): ()
 	table.sort(players, function(a, b)
 		if Match.Modules.Settings.Matches.PRIORITIZE_WAIT_TIME and a.JoinTime ~= b.JoinTime then
 			return a.JoinTime < b.JoinTime
@@ -438,8 +542,8 @@ end
 -- FindBestGroup(): Finds the best possible group of players that fit within ELO spread rules
 -- @param players: The players to search through
 -- @param matchSize: The number of players required for the match
--- @return { any }? : A list of players forming the best valid group, or nil if none found
-function Match:FindBestGroup(players: { any }, matchSize: number): { any }?
+-- @return { ParsedPlayerData }?
+function Match:FindBestGroup(players: { ParsedPlayerData }, matchSize: number): { ParsedPlayerData }?
 	if not players or #players < matchSize then
 		return nil
 	end
@@ -459,37 +563,53 @@ function Match:FindBestGroup(players: { any }, matchSize: number): { any }?
 		local maxELO = group[#group].ELO
 		local actualSpread = maxELO - minELO
 
-		local groupValid = true
-		for _, player in group do
-			local waitTime = math.max(0, currentTime - (player.JoinTime or currentTime))
-			local baseSpread = Match.Modules.Settings.Matches.ELO_CHANGE or 200
-			local increaseRate = Match.Modules.Settings.Matches.ELO_INCREASE_RATE or 5
-			local playerAllowedSpread = baseSpread + (waitTime * increaseRate)
+		local groupValid = self:IsGroupValid(group, actualSpread, currentTime)
 
-			if actualSpread > playerAllowedSpread then
-				groupValid = false
-				break
-			end
+		if not groupValid then
+			continue
 		end
 
-		if groupValid and actualSpread < bestSpread then
-			bestSpread = actualSpread
-			bestGroup = group
-			if actualSpread == 0 then
-				break
-			end
+		if actualSpread >= bestSpread then
+			continue
+		end
+
+		bestSpread = actualSpread
+		bestGroup = group
+
+		if actualSpread == 0 then
+			break
 		end
 	end
 
 	return bestGroup
 end
 
+-- IsGroupValid(): Validates whether a matchmaking group meets ELO spread requirements for all players each player has a dynamic allowed spread based on their queue wait time
+-- @param group: { ParsedPlayerData }
+-- @param actualSpread: The ELO difference between highest and lowest ELO players in the group
+-- @param currentTime: Current timestamp used to calculate wait times
+-- @return boolean: True if all players in the group accept the current ELO spread, false otherwise
+function Match:IsGroupValid(group: { ParsedPlayerData }, actualSpread: number, currentTime: number): boolean
+	for _, player in group do
+		local waitTime = math.max(0, currentTime - (player.JoinTime or currentTime))
+		local baseSpread = Match.Modules.Settings.Matches.ELO_CHANGE or 200
+		local increaseRate = Match.Modules.Settings.Matches.ELO_INCREASE_RATE or 5
+		local playerAllowedSpread = baseSpread + (waitTime * increaseRate)
+
+		if actualSpread > playerAllowedSpread then
+			return false
+		end
+	end
+
+	return true
+end
+
 -- CreateCrossServerMatch(): Creates a cross-server match, locks players, removes them from the queue, reserves a server, and notifies other servers
--- @param players: The players to put into the match
+-- @param players: { ParsedPlayerData }
 -- @param mode: The mode of the match
 -- @param subMode: The sub-mode of the match
 -- @return boolean: True if the match was successfully created, false otherwise
-function Match:CreateCrossServerMatch(players: { any }, mode: string, subMode: string): boolean
+function Match:CreateCrossServerMatch(players: { ParsedPlayerData }, mode: string, subMode: string): boolean
 	if not players or #players == 0 then
 		warn("No players provided for match creation")
 		return false
@@ -497,25 +617,61 @@ function Match:CreateCrossServerMatch(players: { any }, mode: string, subMode: s
 
 	print("Creating cross-server match with", #players, "players for", mode, subMode)
 
+	local lockedPlayerIds = self:LockAllPlayers(players)
+
+	if not lockedPlayerIds then
+		return false
+	end
+
+	local code = self:ReserveMatchServer()
+
+	if not code then
+		self:UnlockPlayers(lockedPlayerIds)
+		return false
+	end
+
+	local playersByServer, removalFailures = self:ProcessPlayerRemoval(players, mode, subMode)
+
+	self:UpdateLocalQueueCount(players, mode, subMode)
+
+	if removalFailures > 0 then
+		warn(removalFailures, "queue removal failures occurred")
+	end
+
+	local notifySuccess = self:NotifyServersOfMatch(code, playersByServer, mode, subMode)
+
+	if not notifySuccess then
+		self:UnlockPlayers(lockedPlayerIds)
+		return false
+	end
+
+	print("Successfully created cross-server match", Match.Modules.Settings.Information.SERVER_ID)
+
+	return true
+end
+
+-- LockAllPlayers(): Attempts to lock all players for the match
+-- @param { ParsedPlayerData }: Array of player data objects
+-- @return { number }?: Array of locked player IDs on success, nil on failure
+function Match:LockAllPlayers(players: { ParsedPlayerData }): { number }?
 	local lockMap = getLockMap()
 	local lockedPlayerIds = {}
-	local allPlayersValid = true
 
 	for _, playerData in players do
 		if not playerData.UserId then
 			warn("Invalid player data missing UserId")
-			allPlayersValid = false
-			break
+			self:UnlockPlayers(lockedPlayerIds)
+			return nil
 		end
 
 		local success, err = pcall(function()
 			return lockMap:UpdateAsync(
-				tostring(playerData.UserId), 
+				tostring(playerData.UserId),
 				function(oldData)
 					return {
-						Status = "InMatch", 
-						MatchId = Match.Modules.Settings.Information.SERVER_ID, 
-						Timestamp = tick() 
+						Status = "InMatch",
+						MatchId = Match.Modules.Settings.Information.SERVER_ID,
+						Timestamp = tick()
 					}
 				end,
 				Match.Modules.Settings.Matches.LOCK_TIMEOUT
@@ -524,30 +680,37 @@ function Match:CreateCrossServerMatch(players: { any }, mode: string, subMode: s
 
 		if not success then
 			warn("Failed to lock player", playerData.UserId, ":", err)
-			allPlayersValid = false
-			break
+			self:UnlockPlayers(lockedPlayerIds)
+			return nil
 		end
 
 		table.insert(lockedPlayerIds, playerData.UserId)
 	end
 
-	if not allPlayersValid then
-		self:UnlockPlayers(lockedPlayerIds)
-		return false
-	end
+	return lockedPlayerIds
+end
 
-	local code, reserveErr
-
-	local success, err = pcall(function()
-		code, reserveErr = TeleportService:ReserveServer(Match.Modules.Settings.Information.PLACE_ID)
+-- ReserveMatchServer(): Reserves a server for the match
+-- @return string?: Server code on success, nil on failure
+function Match:ReserveMatchServer(): string?
+	local success, result = pcall(function()
+		return TeleportService:ReserveServer(Match.Modules.Settings.Information.PLACE_ID)
 	end)
 
-	if not success or not code then
-		warn("Failed to reserve server:", err or reserveErr)
-		self:UnlockPlayers(lockedPlayerIds)
-		return false
+	if not success or not result then
+		warn("Failed to reserve server:", result)
+		return nil
 	end
 
+	return result
+end
+
+-- ProcessPlayerRemoval(): Removes players from queue and organizes them by server
+-- @param players: { ParsedPlayerData }
+-- @param mode: Game mode string
+-- @param subMode: Game sub-mode string
+-- @return ({ [string]: { number } }, number): Table of players organized by server ID, number of removal failures
+function Match:ProcessPlayerRemoval(players: { ParsedPlayerData }, mode: string, subMode: string): ({ [string]: { number } }, number)
 	local playersByServer = {}
 	local removalFailures = 0
 	local queue = getQueue(mode, subMode)
@@ -577,6 +740,14 @@ function Match:CreateCrossServerMatch(players: { any }, mode: string, subMode: s
 		table.insert(playersByServer[serverId], playerData.UserId)
 	end
 
+	return playersByServer, removalFailures
+end
+
+-- UpdateLocalQueueCount(): Updates the local queue count after match creation
+-- @param players: { ParsedPlayerData }
+-- @param mode: Game mode string
+-- @param subMode: Game sub-mode string
+function Match:UpdateLocalQueueCount(players: { ParsedPlayerData }, mode: string, subMode: string): ()
 	local queueKey = mode .. "_" .. subMode
 	local localPlayersRemoved = 0
 
@@ -587,12 +758,16 @@ function Match:CreateCrossServerMatch(players: { any }, mode: string, subMode: s
 	end
 
 	Match.Data.localQueueCounts[queueKey] = math.max(0, (Match.Data.localQueueCounts[queueKey] or 0) - localPlayersRemoved)
+end
 
-	if removalFailures > 0 then
-		warn(removalFailures, "queue removal failures occurred")
-	end
-
-	local notifySuccess, notifyErr = pcall(function()
+-- NotifyServersOfMatch(): Notifies all servers about the new match
+-- @param code: Reserved server code
+-- @param playersByServer: Players organized by server ID
+-- @param mode: Game mode string
+-- @param subMode: Game sub-mode string
+-- @return boolean: True on success, false on failure
+function Match:NotifyServersOfMatch(code: string, playersByServer: { [string]: { number } }, mode: string, subMode: string): boolean
+	local success, err = pcall(function()
 		MessagingService:PublishAsync("CrossServerTeleport", {
 			MatchId = Match.Modules.Settings.Information.SERVER_ID,
 			ServerCode = code,
@@ -604,13 +779,11 @@ function Match:CreateCrossServerMatch(players: { any }, mode: string, subMode: s
 		})
 	end)
 
-	if not notifySuccess then
-		warn("Failed to notify servers:", notifyErr)
-		self:UnlockPlayers(lockedPlayerIds)
+	if not success then
+		warn("Failed to notify servers:", err)
 		return false
 	end
 
-	print("Successfully created cross-server match", Match.Modules.Settings.Information.SERVER_ID)
 	return true
 end
 
@@ -618,6 +791,7 @@ end
 -- @param playerIds: The user IDs of players to unlock
 function Match:UnlockPlayers(playerIds: { number }): ()
 	local lockMap = getLockMap()
+
 	for _, userId in playerIds do
 		pcall(function()
 			lockMap:RemoveAsync(tostring(userId))
@@ -627,7 +801,7 @@ end
 
 -- HandleTeleportRequest(): Handles a teleport request by teleporting players to a reserved private server for a cross-server match, with retries and backoff
 -- @param data: The teleport data (includes PlaceId, ServerCode, PlayersForServer, MatchId, Mode, SubMode)
-function Match:HandleTeleportRequest(data: any): ()
+function Match:HandleTeleportRequest(data: TeleportRequestData): ()
 	local playersToTeleport = {}
 	local playerIds = data.PlayersForServer[Match.Modules.Settings.Information.SERVER_ID]
 	if not playerIds then return end
@@ -684,14 +858,12 @@ function Match:HandleTeleportRequest(data: any): ()
 
 	if #playersToRetry > 0 then
 		warn(`Failed to teleport {#playersToRetry} players after {maxRetries} attempts`)
-		
-		local playerIds = {}
-		
-		for _, player in playersToRetry do
-			table.insert(playerIds, player.UserId)
-		end
-		
-		self:UnlockPlayers(playerIds)
+
+		local originalPlayerIds = data.PlayersForServer[Match.Modules.Settings.Information.SERVER_ID]
+
+    if originalPlayerIds then
+        self:UnlockPlayers(originalPlayerIds)
+    end
 	end
 end
 
@@ -716,15 +888,15 @@ function Match:QueuePlayer(playerOrList: Player | { Player }, mode: string, subM
 			warn(player.Name .. " is already in the queue for mode:", mode, subMode)
 			continue
 		end
-		
+
 		local playerContinent = Match.Modules.PlayerLocation.GetPlayerContinent(player)
-		
+
 		local key, data = generatePlayerQueueData(player, ELO or 0, playerContinent, subMode)
 
 		if not Match.Data.playerQueueKeys[player.UserId] then
 			Match.Data.playerQueueKeys[player.UserId] = {}
 		end
-		
+
 		Match.Data.playerQueueKeys[player.UserId][queueKey] = key
 
 		local success, err = pcall(function()
@@ -741,9 +913,9 @@ function Match:QueuePlayer(playerOrList: Player | { Player }, mode: string, subM
 	end
 end
 
--- StopQueue(): Stops the player(s) queue for every Mode and subMode
--- @param playerOrList: The player(s) to stop queuing. Pass a list to bulk remove
--- @return boolean: Whether it has worked or not
+-- StopQueue(): Removes the player(s) from all queues across every mode and subMode
+-- @param playerOrList: The player(s) to remove from queues. Pass a single player or a list of players for bulk removal
+-- @return boolean: True if all players were successfully removed from their queues, false if any failures occurred
 function Match:StopQueue(playerOrList: Player | { Player }): boolean
 	local players: { Player } = typeof(playerOrList) == "Instance" and { playerOrList } or playerOrList :: { Player }
 	local allSuccess = true
@@ -756,21 +928,34 @@ function Match:StopQueue(playerOrList: Player | { Player }): boolean
 		end
 
 		local playerQueues = Match.Data.playerQueueKeys[player.UserId]
-		if playerQueues then
-			for queueKey, keyToRemove in playerQueues do
-				local mode, subMode = queueKey:match("(.+)_(.+)")
-				if mode and subMode then
-					local success = pcall(function()
-						getQueue(mode, subMode):RemoveAsync(keyToRemove)
-					end)
-					if success then
-						Match.Data.localQueueCounts[queueKey] = math.max(0, (Match.Data.localQueueCounts[queueKey] or 0) - 1)
-					else
-						warn("Failed to remove from queue:", queueKey)
-						allSuccess = false
-					end
-				end
+
+		if not playerQueues then
+			pcall(function()
+				lockMap:RemoveAsync(tostring(player.UserId))
+			end)
+
+			Match.Data.playerQueueKeys[player.UserId] = nil
+
+			continue
+		end
+
+		for queueKey, keyToRemove in playerQueues do
+			local mode, subMode = queueKey:match("(.+)_(.+)")
+			if not mode or not subMode then
+				continue
 			end
+
+			local success = pcall(function()
+				getQueue(mode, subMode):RemoveAsync(keyToRemove)
+			end)
+
+			if not success then
+				warn("Failed to remove from queue:", queueKey)
+				allSuccess = false
+				continue
+			end
+
+			Match.Data.localQueueCounts[queueKey] = math.max(0, (Match.Data.localQueueCounts[queueKey] or 0) - 1)
 		end
 
 		pcall(function()
@@ -807,32 +992,47 @@ function Match:MatchMake(mode: string, subMode: string): ()
 end
 
 -- StartMatchmaking(): Starts continuous matchmaking loops for all modes and sub-modes; Each loop calls MatchMake at intervals defined by Settings.Matches.CHECK_MATCHMAKING_INTERVALS
--- @param modes: A list of mode names to run matchmaking for
 function Match:StartMatchmaking(): ()
 	for _, mode in Match.Modules.Settings.Modes do
 		for subMode, _ in Match.Modules.Settings.SubModes do
-			local thread = task.spawn(function()
-				while true do
-					task.wait(Match.Modules.Settings.Matches.CHECK_MATCHMAKING_INTERVALS)
-					local success, err = pcall(function()
-						self:MatchMake(mode, subMode)
-					end)
-					if not success then
-						warn(`Matchmaking error for {mode} {subMode}:`, err)
-					end
-				end
-			end)
-			
-			Match.Data.matchmakingTasks[mode.."_"..subMode] = thread
+			self:CreateMatchmakingThread(mode, subMode)
+		end
+	end
+end
+
+-- CreateMatchmakingThread(): Creates and starts a matchmaking thread for a specific game mode combination
+-- @param mode: The main game mode (e.g., "Ranked", "Casual")
+-- @param subMode: The sub-mode variant (e.g., "1v1", "2v2", "4v4")
+function Match:CreateMatchmakingThread(mode: string, subMode: string): ()
+	local thread = task.spawn(function()
+		self:RunMatchmakingLoop(mode, subMode)
+	end)
+
+	Match.Data.matchmakingTasks[mode.."_"..subMode] = thread
+end
+
+-- RunMatchmakingLoop(): Runs the continuous matchmaking loop for a specific mode/subMode combination
+-- @param mode: The main game mode to process
+-- @param subMode: The sub-mode variant to process
+function Match:RunMatchmakingLoop(mode: string, subMode: string): ()
+	while true do
+		task.wait(Match.Modules.Settings.Matches.CHECK_MATCHMAKING_INTERVALS)
+
+		local success, err = pcall(function()
+			self:MatchMake(mode, subMode)
+		end)
+
+		if not success then
+			warn(`Matchmaking error for {mode} {subMode}:`, err)
 		end
 	end
 end
 
 -- StopMatchmaking(): Stops all currently running matchmaking loops that were started with StartMatchmaking; Cancels all tasks and clears the internal task table
 function Match:StopMatchmaking(): ()
-	for key, thread in self._matchmakingTasks do
+	for key, thread in Match.Data.matchmakingTasks do
 		task.cancel(thread)
-		self._matchmakingTasks[key] = nil
+		Match.Data.matchmakingTasks[key] = nil
 	end
 end
 
@@ -842,7 +1042,7 @@ end
 
 -- Cleanup(): Cleans up all caches
 function Match:Cleanup()
-	for _, connection in Match.Data.messagingConnections :: { RBXScriptConnection } do
+	for _, connection in Match.Data.messagingConnections do
 		pcall(function()
 			connection:Disconnect()
 		end)
@@ -872,7 +1072,7 @@ end
 -- @return boolean: If the player is queued or not
 function Match:IsPlayerQueued(player: Player, mode: string?, subMode: string?): boolean
 	local queues = Match.Data.playerQueueKeys[player.UserId]
-	
+
 	if not queues then
 		return false
 	end
@@ -894,14 +1094,14 @@ function Match:GetQueuedPlayers(mode: string, subMode: string): { number }
 	local players = {}
 	local queue = getQueue(mode, subMode)
 	local batchSize = math.min(200, getMatchSize(subMode) * Match.Modules.Settings.Matches.BATCH_SIZE)
-	
+
 	local success, result = pcall(function()
 		return queue:GetRangeAsync(Enum.SortDirection.Ascending, batchSize)
 	end)
 
 	if success and result then
 		for _, entry in result do
-			local data = HttpService:JSONDecode(entry.Value)
+			local data = HttpService:JSONDecode(entry.value)
 			table.insert(players, data.UserId)
 		end
 	end
@@ -920,7 +1120,7 @@ function Match:GetPlayerJoinTime(player: Player, mode: string, subMode: string):
 	if not key then return nil end
 
 	local queue = getQueue(mode, subMode)
-	
+
 	local success, value = pcall(function()
 		return queue:GetAsync(key)
 	end)

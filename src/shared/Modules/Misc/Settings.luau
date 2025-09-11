@@ -1,3 +1,5 @@
+--!strict
+
 local Settings = {}
 
 Settings.Matches = {
@@ -26,5 +28,7 @@ Settings.SubModes = { -- // Names of mode, totalPlayers is how many players can 
 	["3v3"] = { totalPlayers = 6 },
 	["4v4"] = { totalPlayers = 8 },
 }
+
+table.freeze(Settings)
 
 return Settings
