@@ -69,7 +69,7 @@ PlayerLocation.continentCache = {}
 -- GetPlayerContinent(): Returns the players continent
 -- @param player: The player to get the continent of
 -- @return string: The continent (e.x. NA, SA, EU, etc.)
-function PlayerLocation.GetPlayerContinent(player: Player): string
+function PlayerLocation.GetPlayerContinent(player: Player): string?
 	if not player then
 		return nil
 	end
