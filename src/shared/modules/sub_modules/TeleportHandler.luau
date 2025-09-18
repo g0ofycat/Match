@@ -13,7 +13,7 @@ local TeleportService = game:GetService("TeleportService")
 -- // TYPES
 --=========================
 
-local Types = require(script.Parent.Types)
+local Types = require(script.Parent.Parent.helpers.Types)
 
 --=========================
 -- // DATA
