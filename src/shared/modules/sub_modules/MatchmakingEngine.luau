@@ -18,27 +18,29 @@ local TeleportService = game:GetService("TeleportService")
 local Types = require(script.Parent.Parent.helpers.Types)
 
 --=========================
--- // DATA
+-- // MODULES
 --=========================
 
-local Data
-local Modules
-local QueueManager
-local CrossServerManager
+MatchmakingEngine.Modules = {
+	Settings = require(script.Parent.Parent.helpers.Settings),
+	QueueManager = require(script.Parent.QueueManager),
+	CrossServerManager = require(script.Parent.CrossServerManager)
+}
 
 --=========================
 -- // INIT
 --=========================
 
-function MatchmakingEngine:Initialize(matchData: Types.MatchData, modules: any): ()
-	Data = matchData
-	Modules = modules
-	QueueManager = require(script.Parent.QueueManager)
-	CrossServerManager = require(script.Parent.CrossServerManager)
+-- Initialize(): Init function for this module
+-- @param matchData: Match.Data
+function MatchmakingEngine:Initialize(matchData: Types.MatchData): ()
+	assert(matchData, "[MatchmakingEngine:Initialize]: 'matchData' is nil")
+
+	;(self :: any)._data = matchData
 end
 
 --=========================
--- // MATCHMAKING SERVICE
+-- // HELPER API
 --=========================
 
 -- CanStartMatchmaking(): Some basic checks before getting into real matchmaking
@@ -46,11 +48,11 @@ end
 -- @param subMode: The subMode
 -- @return boolean: Whether you can start matchmaking or not
 function MatchmakingEngine:CanStartMatchmaking(queueKey: string, subMode: string): boolean
-	if Data.isProcessingMatch[queueKey] then
+	if self._data.isProcessingMatch[queueKey] then
 		return false
 	end
 
-	local matchSize = QueueManager:GetMatchSize(subMode)
+	local matchSize = MatchmakingEngine.Modules.QueueManager:GetMatchSize(subMode)
 
 	if matchSize % 2 ~= 0 then
 		warn("Invalid match size for", subMode, "- must be even number")
@@ -67,11 +69,11 @@ end
 function MatchmakingEngine:ProcessMatchmaking(mode: string, subMode: string, queueKey: string): ()
 	local allPlayers = self:CollectPlayers(mode, subMode, queueKey)
 
-	if not allPlayers or #allPlayers == 0 or #allPlayers < QueueManager:GetMatchSize(subMode) then
+	if not allPlayers or #allPlayers == 0 or #allPlayers < MatchmakingEngine.Modules.QueueManager:GetMatchSize(subMode) then
 		return
 	end
 
-	CrossServerManager:RequestCrossServerMatchmaking(mode, subMode)
+	MatchmakingEngine.Modules.CrossServerManager:RequestCrossServerMatchmaking(mode, subMode)
 
 	local bestGroup = self:FindOptimalPlayerGroup(allPlayers, subMode)
 
@@ -88,15 +90,15 @@ end
 -- @param queueKey: The key of the queue
 -- @return { ParsedPlayerData }
 function MatchmakingEngine:CollectPlayers(mode: string, subMode: string, queueKey: string): { Types.ParsedPlayerData }
-	if not Data.localQueueCounts[queueKey] or Data.localQueueCounts[queueKey] == 0 then
+	if not self._data.localQueueCounts[queueKey] or self._data.localQueueCounts[queueKey] == 0 then
 		return {}
 	end
 
 	local allPlayers: { Types.ParsedPlayerData } = {}
-	local queue = QueueManager:GetQueue(mode, subMode)
-	local batchSize = math.min(200, QueueManager:GetMatchSize(subMode) * Modules.Settings.Matches.BATCH_SIZE)
+	local queue = MatchmakingEngine.Modules.QueueManager:GetQueue(mode, subMode)
+	local batchSize = math.min(200, MatchmakingEngine.Modules.QueueManager:GetMatchSize(subMode) * MatchmakingEngine.Modules.Settings.Matches.BATCH_SIZE)
 
-	print("Processing matchmaking: Found", Data.localQueueCounts[queueKey], "total players for", mode, subMode)
+	print("Processing matchmaking: Found", self._data.localQueueCounts[queueKey], "total players for", mode, subMode)
 
 	local success, result = pcall(function()
 		return queue:GetRangeAsync(Enum.SortDirection.Ascending, batchSize)
@@ -144,7 +146,7 @@ end
 -- @param subMode: The subMode
 -- @return { ParsedPlayerData }?
 function MatchmakingEngine:FindOptimalPlayerGroup(allPlayers: { Types.ParsedPlayerData }, subMode: string): { Types.ParsedPlayerData }?
-	local matchSize = QueueManager:GetMatchSize(subMode)
+	local matchSize = MatchmakingEngine.Modules.QueueManager:GetMatchSize(subMode)
 	local continentGroups = self:GroupPlayersByContinent(allPlayers)
 
 	self:SortPlayers(allPlayers)
@@ -183,7 +185,7 @@ end
 -- @param players: The players to sort
 function MatchmakingEngine:SortPlayers(players: { Types.ParsedPlayerData }): ()
 	table.sort(players, function(a, b)
-		if Modules.Settings.Matches.PRIORITIZE_WAIT_TIME and a.JoinTime ~= b.JoinTime then
+		if MatchmakingEngine.Modules.Settings.Matches.PRIORITIZE_WAIT_TIME and a.JoinTime ~= b.JoinTime then
 			return a.JoinTime < b.JoinTime
 		end
 		return a.ELO < b.ELO
@@ -243,8 +245,8 @@ end
 function MatchmakingEngine:IsGroupValid(group: { Types.ParsedPlayerData }, actualSpread: number, currentTime: number): boolean
 	for _, player in group do
 		local waitTime = math.max(0, currentTime - (player.JoinTime or currentTime))
-		local baseSpread = Modules.Settings.Matches.ELO_CHANGE or 200
-		local increaseRate = Modules.Settings.Matches.ELO_INCREASE_RATE or 5
+		local baseSpread = MatchmakingEngine.Modules.Settings.Matches.ELO_CHANGE or 200
+		local increaseRate = MatchmakingEngine.Modules.Settings.Matches.ELO_INCREASE_RATE or 5
 		local playerAllowedSpread = baseSpread + (waitTime * increaseRate)
 
 		if actualSpread > playerAllowedSpread then
@@ -296,7 +298,7 @@ function MatchmakingEngine:CreateCrossServerMatch(players: { Types.ParsedPlayerD
 		return false
 	end
 
-	print("Successfully created cross-server match", Modules.Settings.Information.SERVER_ID)
+	print("Successfully created cross-server match", MatchmakingEngine.Modules.Settings.Information.SERVER_ID)
 
 	return true
 end
@@ -305,7 +307,7 @@ end
 -- @param { ParsedPlayerData }: Array of player data objects
 -- @return { number }?: Array of locked player IDs on success, nil on failure
 function MatchmakingEngine:LockAllPlayers(players: { Types.ParsedPlayerData }): { number }?
-	local lockMap = QueueManager:GetLockMap()
+	local lockMap = MatchmakingEngine.Modules.QueueManager:GetLockMap()
 	local lockedPlayerIds = {}
 
 	for _, playerData in players do
@@ -321,11 +323,11 @@ function MatchmakingEngine:LockAllPlayers(players: { Types.ParsedPlayerData }): 
 				function(oldData)
 					return {
 						Status = "InMatch",
-						MatchId = Modules.Settings.Information.SERVER_ID,
+						MatchId = MatchmakingEngine.Modules.Settings.Information.SERVER_ID,
 						Timestamp = tick()
 					}
 				end,
-				Modules.Settings.Matches.LOCK_TIMEOUT
+				MatchmakingEngine.Modules.Settings.Matches.LOCK_TIMEOUT
 			)
 		end)
 
@@ -345,7 +347,7 @@ end
 -- @return string?: Server code on success, nil on failure
 function MatchmakingEngine:ReserveMatchServer(): string?
 	local success, result = pcall(function()
-		return TeleportService:ReserveServer(Modules.Settings.Information.PLACE_ID)
+		return TeleportService:ReserveServer(MatchmakingEngine.Modules.Settings.Information.PLACE_ID)
 	end)
 
 	if not success or not result then
@@ -364,7 +366,7 @@ end
 function MatchmakingEngine:ProcessPlayerRemoval(players: { Types.ParsedPlayerData }, mode: string, subMode: string): ({ [string]: { number } }, number)
 	local playersByServer = {}
 	local removalFailures = 0
-	local queue = QueueManager:GetQueue(mode, subMode)
+	local queue = MatchmakingEngine.Modules.QueueManager:GetQueue(mode, subMode)
 
 	for _, playerData in players do
 		local removeSuccess = pcall(function()
@@ -376,12 +378,12 @@ function MatchmakingEngine:ProcessPlayerRemoval(players: { Types.ParsedPlayerDat
 			warn("Failed to remove player from queue:", playerData.UserId)
 		end
 
-		if playerData.ServerId == Modules.Settings.Information.SERVER_ID then
+		if playerData.ServerId == MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
 			local player = Players:GetPlayerByUserId(playerData.UserId)
-			if player and Data.playerQueueKeys[playerData.UserId] then
-				Data.playerQueueKeys[playerData.UserId][mode.."_"..subMode] = nil
-				if next(Data.playerQueueKeys[playerData.UserId]) == nil then
-					Data.playerQueueKeys[playerData.UserId] = nil
+			if player and self._data.playerQueueKeys[playerData.UserId] then
+				self._data.playerQueueKeys[playerData.UserId][mode.."_"..subMode] = nil
+				if next(self._data.playerQueueKeys[playerData.UserId]) == nil then
+					self._data.playerQueueKeys[playerData.UserId] = nil
 				end
 			end
 		end
@@ -403,12 +405,12 @@ function MatchmakingEngine:UpdateLocalQueueCount(players: { Types.ParsedPlayerDa
 	local localPlayersRemoved = 0
 
 	for _, playerData in players do
-		if playerData.ServerId == Modules.Settings.Information.SERVER_ID then
+		if playerData.ServerId == MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
 			localPlayersRemoved += 1
 		end
 	end
 
-	Data.localQueueCounts[queueKey] = math.max(0, (Data.localQueueCounts[queueKey] or 0) - localPlayersRemoved)
+	self._data.localQueueCounts[queueKey] = math.max(0, (self._data.localQueueCounts[queueKey] or 0) - localPlayersRemoved)
 end
 
 -- NotifyServersOfMatch(): Notifies all servers about the new match
@@ -420,9 +422,9 @@ end
 function MatchmakingEngine:NotifyServersOfMatch(code: string, playersByServer: { [string]: { number } }, mode: string, subMode: string): boolean
 	local success, err = pcall(function()
 		MessagingService:PublishAsync("CrossServerTeleport", {
-			MatchId = Modules.Settings.Information.SERVER_ID,
+			MatchId = MatchmakingEngine.Modules.Settings.Information.SERVER_ID,
 			ServerCode = code,
-			PlaceId = Modules.Settings.Information.PLACE_ID,
+			PlaceId = MatchmakingEngine.Modules.Settings.Information.PLACE_ID,
 			PlayersForServer = playersByServer,
 			Mode = mode,
 			SubMode = subMode,
@@ -441,7 +443,7 @@ end
 -- UnlockPlayers(): Unlocks players in the lockMap to allow re-queuing or other operations
 -- @param playerIds: The user IDs of players to unlock
 function MatchmakingEngine:UnlockPlayers(playerIds: { number }): ()
-	local lockMap = QueueManager:GetLockMap()
+	local lockMap = MatchmakingEngine.Modules.QueueManager:GetLockMap()
 
 	for _, userId in playerIds do
 		pcall(function()
@@ -451,12 +453,12 @@ function MatchmakingEngine:UnlockPlayers(playerIds: { number }): ()
 end
 
 --=========================
--- // MAIN MATCHMAKING API
+-- // PUBLIC API
 --=========================
 
 -- MatchMake(): Globally handles and checks all players elligble for Matchmaking based on their Mode and subMode and teleports them
--- @param mode: The mode the player should be queued to (Match.Modules.Settings.Modes)
--- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.Settings.SubModes)
+-- @param mode: The mode the player should be queued to (Match.Modules.MatchmakingEngine.Modules.Settings.Modes)
+-- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Modules.MatchmakingEngine.Modules.Settings.SubModes)
 function MatchmakingEngine:MatchMake(mode: string, subMode: string): ()
 	local queueKey = mode .. "_" .. subMode
 
@@ -464,23 +466,23 @@ function MatchmakingEngine:MatchMake(mode: string, subMode: string): ()
 		return
 	end
 
-	Data.isProcessingMatch[queueKey] = true
+	self._data.isProcessingMatch[queueKey] = true
 
 	local success, err = pcall(function()
 		self:ProcessMatchmaking(mode, subMode, queueKey)
 	end)
 
-	Data.isProcessingMatch[queueKey] = false
+	self._data.isProcessingMatch[queueKey] = false
 
 	if not success then
 		warn("Error in CrossServerMatchMake:", err, debug.traceback())
 	end
 end
 
--- StartMatchmaking(): Starts continuous matchmaking loops for all modes and sub-modes; Each loop calls MatchMake at intervals defined by Settings.Matches.CHECK_MATCHMAKING_INTERVALS
+-- StartMatchmaking(): Starts continuous matchmaking loops for all modes and sub-modes; Each loop calls MatchMake at intervals defined by MatchmakingEngine.Modules.Settings.Matches.CHECK_MATCHMAKING_INTERVALS
 function MatchmakingEngine:StartMatchmaking(): ()
-	for _, mode in Modules.Settings.Modes do
-		for subMode, _ in Modules.Settings.SubModes do
+	for _, mode in MatchmakingEngine.Modules.Settings.Modes do
+		for subMode, _ in MatchmakingEngine.Modules.Settings.SubModes do
 			self:CreateMatchmakingThread(mode, subMode)
 		end
 	end
@@ -494,7 +496,7 @@ function MatchmakingEngine:CreateMatchmakingThread(mode: string, subMode: string
 		self:RunMatchmakingLoop(mode, subMode)
 	end)
 
-	Data.matchmakingTasks[mode.."_"..subMode] = thread
+	self._data.matchmakingTasks[mode.."_"..subMode] = thread
 end
 
 -- RunMatchmakingLoop(): Runs the continuous matchmaking loop for a specific mode/subMode combination
@@ -502,7 +504,7 @@ end
 -- @param subMode: The sub-mode variant to process
 function MatchmakingEngine:RunMatchmakingLoop(mode: string, subMode: string): ()
 	while true do
-		task.wait(Modules.Settings.Matches.CHECK_MATCHMAKING_INTERVALS)
+		task.wait(MatchmakingEngine.Modules.Settings.Matches.CHECK_MATCHMAKING_INTERVALS)
 
 		local success, err = pcall(function()
 			self:MatchMake(mode, subMode)
@@ -516,9 +518,9 @@ end
 
 -- StopMatchmaking(): Stops all currently running matchmaking loops that were started with StartMatchmaking; Cancels all tasks and clears the internal task table
 function MatchmakingEngine:StopMatchmaking(): ()
-	for key, thread in Data.matchmakingTasks do
+	for key, thread in self._data.matchmakingTasks do
 		task.cancel(thread)
-		Data.matchmakingTasks[key] = nil
+		self._data.matchmakingTasks[key] = nil
 	end
 end
 
@@ -528,7 +530,7 @@ end
 
 -- Cleanup(): Cleans up matchmaking-specific data
 function MatchmakingEngine:Cleanup(): ()
-	Data.isProcessingMatch = {}
+	self._data.isProcessingMatch = {}
 end
 
 return MatchmakingEngine

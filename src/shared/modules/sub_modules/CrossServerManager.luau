@@ -17,47 +17,51 @@ local HttpService = game:GetService("HttpService")
 local Types = require(script.Parent.Parent.helpers.Types)
 
 --=========================
--- // DATA
+-- // MODULES
 --=========================
 
-local Data
-local Modules
-local QueueManager
+CrossServerManager.Modules = {
+	Settings = require(script.Parent.Parent.helpers.Settings),
+	TeleportHandler = require(script.Parent.TeleportHandler),
+	QueueManager = require(script.Parent.QueueManager)
+}
 
 --=========================
 -- // INIT
 --=========================
 
-function CrossServerManager:Initialize(matchData: Types.MatchData, modules: any): ()
-	Data = matchData
-	Modules = modules
-	QueueManager = require(script.Parent.QueueManager)
+-- Initialize(): Init function for this module
+-- @param matchData: Match.Data
+function CrossServerManager:Initialize(matchData: Types.MatchData): ()
+	assert(matchData, "[CrossServerManager:Initialize]: 'matchData' is nil")
+
+	;(self :: any)._data = matchData
 
 	self:SetupMessagingService()
 end
 
 --=========================
--- // MESSAGING SERVICE
+-- // MESSAGING API
 --=========================
 
 -- SetupMessagingService(): Sets up the messaging service subscribers
 function CrossServerManager:SetupMessagingService(): ()
-	for _, c in Data.messagingConnections do
+	for _, c in self._data.messagingConnections do
 		c:Disconnect()
 	end
 
-	Data.messagingConnections = {}
+	self._data.messagingConnections = {}
 
 	local function subscribe(channel: string, handlerKey: string, handler: ({ Data: any }) -> ()): ()
 		local ok, conn = pcall(function()
 			return MessagingService:SubscribeAsync(channel, handler)
 		end)
 		if ok then
-			Data.messagingConnections[handlerKey] = conn
+			self._data.messagingConnections[handlerKey] = conn
 		end
 	end
 
-	local settings = Modules.Settings
+	local settings = CrossServerManager.Modules.Settings
 	local serverId = settings.Information.SERVER_ID
 
 	subscribe("MatchmakingRequest", "matchmakingRequest", function(msg)
@@ -73,8 +77,7 @@ function CrossServerManager:SetupMessagingService(): ()
 		local d = msg.Data
 		if d.PlayersForServer and d.PlayersForServer[serverId] then
 			task.spawn(function()
-				local TeleportHandler = require(script.Parent.TeleportHandler)
-				TeleportHandler:HandleTeleportRequest(d)
+				CrossServerManager.Modules.TeleportHandler:HandleTeleportRequest(d)
 			end)
 		end
 	end)
@@ -95,7 +98,7 @@ function CrossServerManager:RequestCrossServerMatchmaking(mode: string, subMode:
 		MessagingService:PublishAsync("MatchmakingRequest", {
 			Mode = mode,
 			SubMode = subMode,
-			RequestingServer = Modules.Settings.Information.SERVER_ID,
+			RequestingServer = CrossServerManager.Modules.Settings.Information.SERVER_ID,
 			Timestamp = tick()
 		})
 	end)
@@ -106,9 +109,9 @@ end
 -- @param subMode: The subMode of the mode
 -- @param targetServer: The server to send the status to
 function CrossServerManager:SendQueueStatus(mode: string, subMode: string, targetServer: string): ()
-	local queue = QueueManager:GetQueue(mode, subMode)
+	local queue = CrossServerManager.Modules.QueueManager:GetQueue(mode, subMode)
 	local players = {}
-	local matchSize = QueueManager:GetMatchSize(subMode)
+	local matchSize = CrossServerManager.Modules.QueueManager:GetMatchSize(subMode)
 	local maxPlayers = math.min(50, matchSize * 3)
 
 	local success, result = pcall(function()
@@ -121,7 +124,7 @@ function CrossServerManager:SendQueueStatus(mode: string, subMode: string, targe
 				Mode = mode,
 				SubMode = subMode,
 				TargetServer = targetServer,
-				SendingServer = Modules.Settings.Information.SERVER_ID,
+				SendingServer = CrossServerManager.Modules.Settings.Information.SERVER_ID,
 				Players = {},
 				PlayerCount = 0,
 				Timestamp = tick()
@@ -140,7 +143,7 @@ function CrossServerManager:SendQueueStatus(mode: string, subMode: string, targe
 			continue
 		end
 
-		if data.ServerId ~= Modules.Settings.Information.SERVER_ID then
+		if data.ServerId ~= CrossServerManager.Modules.Settings.Information.SERVER_ID then
 			continue
 		end
 
@@ -163,7 +166,7 @@ function CrossServerManager:SendQueueStatus(mode: string, subMode: string, targe
 			Mode = mode,
 			SubMode = subMode,
 			TargetServer = targetServer,
-			SendingServer = Modules.Settings.Information.SERVER_ID,
+			SendingServer = CrossServerManager.Modules.Settings.Information.SERVER_ID,
 			Players = players,
 			PlayerCount = #players,
 			Timestamp = tick()
@@ -176,20 +179,20 @@ end
 function CrossServerManager:ReceiveQueueStatus(data: Types.QueueStatusResponseData): ()
 	local queueKey = data.Mode .. "_" .. data.SubMode
 
-	if not Data.crossServerData[queueKey] then
-		Data.crossServerData[queueKey] = {}
+	if not self._data.crossServerData[queueKey] then
+		self._data.crossServerData[queueKey] = {}
 	end
 
-	Data.crossServerData[queueKey][data.SendingServer] = {
+	self._data.crossServerData[queueKey][data.SendingServer] = {
 		Players = data.Players,
 		Timestamp = data.Timestamp
 	}
 
 	local now = tick()
 
-	for serverId, serverData in Data.crossServerData[queueKey] do
-		if now - serverData.Timestamp > Modules.Settings.Matches.CROSS_SERVER_DATA_TTL then
-			Data.crossServerData[queueKey][serverId] = nil
+	for serverId, serverData in self._data.crossServerData[queueKey] do
+		if now - serverData.Timestamp > CrossServerManager.Modules.Settings.Matches.CROSS_SERVER_DATA_TTL then
+			self._data.crossServerData[queueKey][serverId] = nil
 		end
 	end
 end
@@ -200,16 +203,16 @@ end
 
 -- Cleanup(): Cleans up cross-server specific data
 function CrossServerManager:Cleanup(): ()
-	for _, connection in Data.messagingConnections do
+	for _, connection in self._data.messagingConnections do
 		pcall(function()
 			connection:Disconnect()
 		end)
 	end
 
-	Data.messagingConnections = {}
+	self._data.messagingConnections = {}
 
-	if Data.crossServerData then
-		Data.crossServerData = {}
+	if self._data.crossServerData then
+		self._data.crossServerData = {}
 	end
 end
 

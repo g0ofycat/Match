@@ -33,7 +33,6 @@ local Types = require(script.Parent.modules.helpers.Types)
 
 Match.Helpers = {
 	Settings = require(script.Parent.modules.helpers.Settings), -- // Handles all of the core information like modes, subModes, etc
-	PlayerLocation = require(script.Parent.modules.helpers.PlayerLocation) -- // Uses LocalizationService to get a player by their Continent
 }
 
 --=========================
@@ -70,10 +69,9 @@ Match.Data = {
 -- // INIT
 --=========================
 
-Match.SubModules.QueueManager:Initialize(Match.Data, Match.Helpers :: any)
-Match.SubModules.CrossServerManager:Initialize(Match.Data, Match.Helpers :: any)
-Match.SubModules.MatchmakingEngine:Initialize(Match.Data, Match.Helpers :: any)
-Match.SubModules.TeleportHandler:Initialize(Match.Helpers :: any)
+Match.SubModules.QueueManager:Initialize(Match.Data)
+Match.SubModules.CrossServerManager:Initialize(Match.Data)
+Match.SubModules.MatchmakingEngine:Initialize(Match.Data)
 
 --=========================
 -- // MAIN API

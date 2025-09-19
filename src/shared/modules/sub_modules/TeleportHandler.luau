@@ -16,20 +16,13 @@ local TeleportService = game:GetService("TeleportService")
 local Types = require(script.Parent.Parent.helpers.Types)
 
 --=========================
--- // DATA
+-- // MODULES
 --=========================
 
-local Modules
-local QueueManager
-
---=========================
--- // INIT
---=========================
-
-function TeleportHandler:Initialize(modules: any): ()
-	Modules = modules
+TeleportHandler.Modules = {
+	Settings = require(script.Parent.Parent.helpers.Settings),
 	QueueManager = require(script.Parent.QueueManager)
-end
+}
 
 --=========================
 -- // PUBLIC API
@@ -39,7 +32,7 @@ end
 -- @param data: The teleport data (includes PlaceId, ServerCode, PlayersForServer, MatchId, Mode, SubMode)
 function TeleportHandler:HandleTeleportRequest(data: Types.TeleportRequestData): ()
 	local playersToTeleport = {}
-	local playerIds = data.PlayersForServer[Modules.Settings.Information.SERVER_ID]
+	local playerIds = data.PlayersForServer[TeleportHandler.Modules.Settings.Information.SERVER_ID]
 	if not playerIds then return end
 
 	for _, userId in playerIds do
@@ -54,12 +47,12 @@ function TeleportHandler:HandleTeleportRequest(data: Types.TeleportRequestData):
 	print("Teleporting", #playersToTeleport, "players to cross-server match")
 
 	local playersToRetry = playersToTeleport
-	local maxRetries = Modules.Settings.Matches.TELEPORT_RETRIES
+	local maxRetries = TeleportHandler.Modules.Settings.Matches.TELEPORT_RETRIES
 
 	for attempt = 1, maxRetries do
 		if #playersToRetry == 0 then break end
 
-		local success, err = pcall(function()
+		local success = pcall(function()
 			TeleportService:TeleportToPrivateServer(
 				data.PlaceId,
 				data.ServerCode,
@@ -95,7 +88,7 @@ function TeleportHandler:HandleTeleportRequest(data: Types.TeleportRequestData):
 	if #playersToRetry > 0 then
 		warn(`Failed to teleport {#playersToRetry} players after {maxRetries} attempts`)
 
-		local originalPlayerIds = data.PlayersForServer[Modules.Settings.Information.SERVER_ID]
+		local originalPlayerIds = data.PlayersForServer[TeleportHandler.Modules.Settings.Information.SERVER_ID]
 
 		if originalPlayerIds then
 			self:UnlockPlayers(originalPlayerIds)
@@ -106,7 +99,7 @@ end
 -- UnlockPlayers(): Unlocks players in the lockMap to allow re-queuing or other operations
 -- @param playerIds: The user IDs of players to unlock
 function TeleportHandler:UnlockPlayers(playerIds: { number }): ()
-	local lockMap = QueueManager:GetLockMap()
+	local lockMap = TeleportHandler.Modules.QueueManager:GetLockMap()
 
 	for _, userId in playerIds do
 		pcall(function()

@@ -97,8 +97,13 @@ end
 -- // CLEANUP
 --=========================
 
-game.Players.PlayerRemoving:Connect(function(player)
-	PlayerLocation.continentCache[player.UserId] = nil
-end)
+-- CleanupInit(): Connect all events related to cleanup
+function PlayerLocation.CleanupInit(): ()
+	game.Players.PlayerRemoving:Connect(function(player)
+		PlayerLocation.continentCache[player.UserId] = nil
+	end)
+end
+
+PlayerLocation.CleanupInit()
 
 return PlayerLocation
