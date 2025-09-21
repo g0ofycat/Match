@@ -22,17 +22,28 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 --=========================
+-- // VARIABLES
+--=========================
+
+local Modules = script.parent:FindFirstChild("modules")
+if not Modules then error("You do not have the modules folder in ReplicatedStorage!") return end
+local SubModules = Modules:FindFirstChild("sub_modules")
+if not SubModules then error("You do not have the sub_modules folder in the modules folder!") return end
+local Helpers = Modules:FindFirstChild("helpers")
+if not Helpers then error("You do not have a helpers folder in the modules folder!") return end
+
+--=========================
 -- // TYPES
 --=========================
 
-local Types = require(script.Parent.modules.helpers.Types)
+local Types = require(Helpers.Types)
 
 --=========================
 -- // HELPERS
 --=========================
 
 Match.Helpers = {
-	Settings = require(script.Parent.modules.helpers.Settings), -- // Handles all of the core information like modes, subModes, etc
+	Settings = require(Helpers.Settings), -- // Handles all of the core information like modes, subModes, etc
 }
 
 --=========================
@@ -40,10 +51,10 @@ Match.Helpers = {
 --=========================
 
 Match.SubModules = {
-	QueueManager = require(script.Parent.modules.sub_modules.QueueManager),
-	CrossServerManager = require(script.Parent.modules.sub_modules.CrossServerManager),
-  MatchmakingEngine = require(script.Parent.modules.sub_modules.MatchmakingEngine),
-	TeleportHandler = require(script.Parent.modules.sub_modules.TeleportHandler)
+	QueueManager = require(SubModules.QueueManager),
+	CrossServerManager = require(SubModules.CrossServerManager),
+  MatchmakingEngine = require(SubModules.MatchmakingEngine),
+	TeleportHandler = require(SubModules.TeleportHandler)
 }
 
 --=========================
