@@ -24,7 +24,7 @@ local RunService = game:GetService("RunService")
 --=========================
 -- // VARIABLES
 --=========================
-
+if script.Parent.Name ~= "ReplicatedStorage" then warn("You did not place this script in ReplicatedStorage!") return end
 local Modules = script.parent:FindFirstChild("modules")
 if not Modules then error("You do not have the modules folder in ReplicatedStorage!") return end
 local SubModules = Modules:FindFirstChild("sub_modules")
