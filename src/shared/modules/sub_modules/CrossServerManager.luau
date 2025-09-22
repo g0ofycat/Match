@@ -1,6 +1,20 @@
 --!strict
 
-local CrossServerManager = {}
+local CrossServerManager = {
+	_data = {
+		crossServerData = {},
+		isProcessingMatch = {},
+		localQueueCounts = {},
+		matchmakingTasks = {},
+		playerQueueKeys = {},
+		queueCache = {},
+		messagingConnections = {},
+
+		lastCacheCleanup = 0,
+		heartbeatConnection = nil,
+		_lockMap = nil :: MemoryStoreSortedMap?
+	}
+}
 
 --=========================
 -- // SERVICES
@@ -35,7 +49,7 @@ CrossServerManager.Modules = {
 function CrossServerManager:Initialize(matchData: Types.MatchData): ()
 	assert(matchData, "[CrossServerManager:Initialize]: 'matchData' is nil")
 
-	;(self :: any)._data = matchData
+	self._data = matchData
 
 	self:SetupMessagingService()
 end

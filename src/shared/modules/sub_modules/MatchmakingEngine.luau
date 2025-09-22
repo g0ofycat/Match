@@ -1,6 +1,11 @@
 --!strict
 
-local MatchmakingEngine = {}
+local MatchmakingEngine = {
+	_data = {
+		isProcessingMatch = {},
+		matchmakingTasks = {}
+	}
+}
 
 --=========================
 -- // SERVICES

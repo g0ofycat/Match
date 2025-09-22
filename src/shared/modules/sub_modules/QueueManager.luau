@@ -1,6 +1,13 @@
 --!strict
 
-local QueueManager = {}
+local QueueManager = {
+	_data = {
+		playerQueueKeys = {},
+		queueCache = {},
+		localQueueCounts = {},
+		lastCacheCleanup = 0
+	}
+}
 
 --=========================
 -- // SERVICES

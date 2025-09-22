@@ -22,17 +22,24 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 --=========================
+-- // PATHS
+--=========================
+
+local HelpersPath = script.Parent.modules.helpers
+local SubModulesPath = script.Parent.modules.sub_modules
+
+--=========================
 -- // TYPES
 --=========================
 
-local Types = require(script.Parent.modules.helpers.Types)
+local Types = require(HelpersPath.Types)
 
 --=========================
 -- // HELPERS
 --=========================
 
 Match.Helpers = {
-	Settings = require(script.Parent.modules.helpers.Settings), -- // Handles all of the core information like modes, subModes, etc
+    Settings = require(HelpersPath.Settings), -- // Handles core info like modes, subModes, etc
 }
 
 --=========================
@@ -40,10 +47,10 @@ Match.Helpers = {
 --=========================
 
 Match.SubModules = {
-	QueueManager = require(script.Parent.modules.sub_modules.QueueManager),
-	CrossServerManager = require(script.Parent.modules.sub_modules.CrossServerManager),
-  MatchmakingEngine = require(script.Parent.modules.sub_modules.MatchmakingEngine),
-	TeleportHandler = require(script.Parent.modules.sub_modules.TeleportHandler)
+    QueueManager = require(SubModulesPath.QueueManager),
+    CrossServerManager = require(SubModulesPath.CrossServerManager),
+    MatchmakingEngine = require(SubModulesPath.MatchmakingEngine),
+    TeleportHandler = require(SubModulesPath.TeleportHandler),
 }
 
 --=========================
