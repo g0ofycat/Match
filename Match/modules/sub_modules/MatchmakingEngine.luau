@@ -101,7 +101,7 @@ function MatchmakingEngine:CollectPlayers(mode: string, subMode: string, queueKe
 
 	local allPlayers: { Types.ParsedPlayerData } = {}
 	local queue = MatchmakingEngine.Modules.QueueManager:GetQueue(mode, subMode)
-	local batchSize = math.min(200, MatchmakingEngine.Modules.QueueManager:GetMatchSize(subMode) * MatchmakingEngine.Modules.Settings.Matches.BATCH_SIZE)
+	local batchSize = MatchmakingEngine.Modules.QueueManager:GetMatchSize(subMode) * MatchmakingEngine.Modules.Settings.Matches.BATCH_SIZE
 
 	print("Processing matchmaking: Found", self._data.localQueueCounts[queueKey], "total players for", mode, subMode)
 
@@ -133,7 +133,7 @@ function MatchmakingEngine:ParseQueueEntry(entry: any): Types.ParsedPlayerData
 	end)
 
 	if not success or not data or not data.UserId or not data.ELO then
-		error("Failed to parse queue entry: " .. tostring(entry.key))
+		error("Failed to parse queue entry: " .. entry.key)
 	end
 
 	return {
@@ -152,20 +152,25 @@ end
 -- @return { ParsedPlayerData }?
 function MatchmakingEngine:FindOptimalPlayerGroup(allPlayers: { Types.ParsedPlayerData }, subMode: string): { Types.ParsedPlayerData }?
 	local matchSize = MatchmakingEngine.Modules.QueueManager:GetMatchSize(subMode)
-	local continentGroups = self:GroupPlayersByContinent(allPlayers)
 
-	self:SortPlayers(allPlayers)
+	local continentGroups = self:GroupPlayersByContinent(allPlayers)
 
 	for continent, playersInContinent in continentGroups do
 		if #playersInContinent < matchSize then
 			continue
 		end
 
+		self:SortPlayers(playersInContinent)
+
 		local bestGroup = self:FindBestGroup(playersInContinent, matchSize)
 
 		if bestGroup then
 			return bestGroup
 		end
+	end
+
+	if allPlayers and #allPlayers > 0 then
+		self:SortPlayers(allPlayers)
 	end
 
 	return self:FindBestGroup(allPlayers, matchSize)
@@ -208,7 +213,7 @@ function MatchmakingEngine:FindBestGroup(players: { Types.ParsedPlayerData }, ma
 
 	local bestGroup = nil
 	local bestSpread = math.huge
-	local maxIterations = math.min(#players - matchSize + 1, 50)
+	local maxIterations = math.min(#players - matchSize + 1, MatchmakingEngine.Modules.Settings.Matches.MAX_FINDGROUP_ITERATIONS)
 	local currentTime = tick()
 
 	for i = 1, maxIterations do
@@ -326,17 +331,20 @@ function MatchmakingEngine:LockAllPlayers(players: { Types.ParsedPlayerData }): 
 			return lockMap:UpdateAsync(
 				tostring(playerData.UserId),
 				function(oldData)
+					if oldData and oldData.Status == "InMatch" and oldData.MatchId ~= MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
+						return nil
+					end
 					return {
 						Status = "InMatch",
 						MatchId = MatchmakingEngine.Modules.Settings.Information.SERVER_ID,
-						Timestamp = tick()
+						Timestamp = tick(),
 					}
 				end,
 				MatchmakingEngine.Modules.Settings.Matches.LOCK_TIMEOUT
 			)
 		end)
 
-		if not success then
+		if not success or not err then
 			warn("Failed to lock player", playerData.UserId, ":", err)
 			self:UnlockPlayers(lockedPlayerIds)
 			return nil
@@ -374,28 +382,33 @@ function MatchmakingEngine:ProcessPlayerRemoval(players: { Types.ParsedPlayerDat
 	local queue = MatchmakingEngine.Modules.QueueManager:GetQueue(mode, subMode)
 
 	for _, playerData in players do
-		local removeSuccess = pcall(function()
-			queue:RemoveAsync(playerData.QueueKey)
-		end)
+		local success, err = pcall(queue.RemoveAsync, queue, playerData.QueueKey)
 
-		if not removeSuccess then
+		if not success then
 			removalFailures += 1
-			warn("Failed to remove player from queue:", playerData.UserId)
-		end
-
-		if playerData.ServerId == MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
-			local player = Players:GetPlayerByUserId(playerData.UserId)
-			if player and self._data.playerQueueKeys[playerData.UserId] then
-				self._data.playerQueueKeys[playerData.UserId][mode.."_"..subMode] = nil
-				if next(self._data.playerQueueKeys[playerData.UserId]) == nil then
-					self._data.playerQueueKeys[playerData.UserId] = nil
-				end
-			end
+			warn("Failed to remove player from queue:", playerData.UserId, err)
+			continue
 		end
 
 		local serverId = playerData.ServerId
 		playersByServer[serverId] = playersByServer[serverId] or {}
 		table.insert(playersByServer[serverId], playerData.UserId)
+
+		if serverId ~= MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
+			continue
+		end
+
+		local player = Players:GetPlayerByUserId(playerData.UserId)
+
+		if not player or not self._data.playerQueueKeys[playerData.UserId] then
+			continue
+		end
+
+		self._data.playerQueueKeys[playerData.UserId][mode .. "_" .. subMode] = nil
+
+		if next(self._data.playerQueueKeys[playerData.UserId]) == nil then
+			self._data.playerQueueKeys[playerData.UserId] = nil
+		end
 	end
 
 	return playersByServer, removalFailures
@@ -473,15 +486,15 @@ function MatchmakingEngine:MatchMake(mode: string, subMode: string): ()
 
 	self._data.isProcessingMatch[queueKey] = true
 
-	local success, err = pcall(function()
-		self:ProcessMatchmaking(mode, subMode, queueKey)
-	end)
-
-	self._data.isProcessingMatch[queueKey] = false
-
-	if not success then
+	local function errHandler(err)
 		warn("Error in CrossServerMatchMake:", err, debug.traceback())
 	end
+
+	xpcall(function()
+		self:ProcessMatchmaking(mode, subMode, queueKey)
+	end, errHandler)
+
+	self._data.isProcessingMatch[queueKey] = false
 end
 
 -- StartMatchmaking(): Starts continuous matchmaking loops for all modes and sub-modes; Each loop calls MatchMake at intervals defined by MatchmakingEngine.Modules.Settings.Matches.CHECK_MATCHMAKING_INTERVALS

@@ -31,10 +31,11 @@ TeleportHandler.Modules = {
 -- HandleTeleportRequest(): Handles a teleport request by teleporting players to a reserved private server for a cross-server match, with retries and backoff
 -- @param data: The teleport data (includes PlaceId, ServerCode, PlayersForServer, MatchId, Mode, SubMode)
 function TeleportHandler:HandleTeleportRequest(data: Types.TeleportRequestData): ()
-	local playersToTeleport = {}
-	local playerIds = data.PlayersForServer[TeleportHandler.Modules.Settings.Information.SERVER_ID]
+	local serverId = TeleportHandler.Modules.Settings.Information.SERVER_ID
+	local playerIds = data.PlayersForServer[serverId]
 	if not playerIds then return end
 
+	local playersToTeleport = {}
 	for _, userId in playerIds do
 		local player = Players:GetPlayerByUserId(userId)
 		if player then
@@ -43,7 +44,6 @@ function TeleportHandler:HandleTeleportRequest(data: Types.TeleportRequestData):
 	end
 
 	if #playersToTeleport == 0 then return end
-
 	print("Teleporting", #playersToTeleport, "players to cross-server match")
 
 	local playersToRetry = playersToTeleport
@@ -88,11 +88,13 @@ function TeleportHandler:HandleTeleportRequest(data: Types.TeleportRequestData):
 	if #playersToRetry > 0 then
 		warn(`Failed to teleport {#playersToRetry} players after {maxRetries} attempts`)
 
-		local originalPlayerIds = data.PlayersForServer[TeleportHandler.Modules.Settings.Information.SERVER_ID]
+		local failedIds = {}
 
-		if originalPlayerIds then
-			self:UnlockPlayers(originalPlayerIds)
+		for _, player in playersToRetry do
+			table.insert(failedIds, player.UserId)
 		end
+
+		self:UnlockPlayers(failedIds)
 	end
 end
 

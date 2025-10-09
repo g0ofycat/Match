@@ -126,7 +126,8 @@ function CrossServerManager:SendQueueStatus(mode: string, subMode: string, targe
 	local queue = CrossServerManager.Modules.QueueManager:GetQueue(mode, subMode)
 	local players = {}
 	local matchSize = CrossServerManager.Modules.QueueManager:GetMatchSize(subMode)
-	local maxPlayers = math.min(50, matchSize * 3)
+	local maxPlayersPerQueueStatus = CrossServerManager.Modules.Settings.Matches.MAX_QUEUE_STATUS_PLAYERS or 50
+	local maxPlayers = math.min(maxPlayersPerQueueStatus, matchSize * 3)
 
 	local success, result = pcall(function()
 		return queue:GetRangeAsync(Enum.SortDirection.Ascending, maxPlayers)

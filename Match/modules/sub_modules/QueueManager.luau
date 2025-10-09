@@ -113,7 +113,7 @@ end
 -- @param subMode: The subMode
 -- @return key, HttpService:JSONEncode(data)
 local function generatePlayerQueueData(player: Player, ELO: number, continent: string, subMode: string): (string, string)
-	local timestamp = math.floor(tick() * 1000)
+	local timestamp = math.floor(tick())
 	local key = string.format("%010d", timestamp) .. "_" .. tostring(player.UserId)
 
 	local data: Types.PlayerQueueData = {
@@ -125,7 +125,14 @@ local function generatePlayerQueueData(player: Player, ELO: number, continent: s
 		SubMode = subMode
 	}
 
-	return key, HttpService:JSONEncode(data)
+	local success, encoded = pcall(HttpService.JSONEncode, HttpService, data)
+
+	if not success then
+		warn("Failed to JSONEncode player queue data for " .. tostring(player.UserId) .. ": " .. encoded)
+		return key, nil
+	end
+
+	return key, encoded
 end
 
 --=========================
@@ -151,25 +158,19 @@ function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: strin
 		end
 
 		local playerContinent = QueueManager.Modules.PlayerLocation.GetPlayerContinent(player) :: string
-
 		local key, data = generatePlayerQueueData(player, ELO or 0, playerContinent, subMode)
-
-		if not self._data.playerQueueKeys[player.UserId] then
-			self._data.playerQueueKeys[player.UserId] = {}
-		end
-
-		self._data.playerQueueKeys[player.UserId][queueKey] = key
 
 		local success, err = pcall(function()
 			getQueue(self, mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
 		end)
 
-		if not success then
-			warn("Failed to queue player:", err)
-			self._data.playerQueueKeys[player.UserId][queueKey] = nil
+		if success then
+			self._data.playerQueueKeys[player.UserId] = self._data.playerQueueKeys[player.UserId] or {}
+			self._data.playerQueueKeys[player.UserId][queueKey] = key
+			self._data.localQueueCounts[queueKey] = (self._data.localQueueCounts[queueKey] or 0) + 1
+			print("Queued player", player.Name, "for", mode, subMode, "mode. Region:", playerContinent)
 		else
-			self._data.localQueueCounts[queueKey] = math.max(0, (self._data.localQueueCounts[queueKey] or 0) + 1)
-			print("Queued player", player.Name, "for", mode, subMode, "mode. Region: " .. playerContinent)
+			warn("Failed to queue player:", err)
 		end
 	end
 end
@@ -262,7 +263,7 @@ function QueueManager:GetQueuedPlayers(mode: string, subMode: string): { number 
 	local players = {}
 	local queue = getQueue(self, mode, subMode)
 	local matchSize = self:GetMatchSize(subMode)
-	local batchSize = math.min(200, matchSize :: number * QueueManager.Modules.Settings.Matches.BATCH_SIZE)
+	local batchSize = matchSize :: number * QueueManager.Modules.Settings.Matches.BATCH_SIZE
 
 	local success, result = pcall(function()
 		return queue:GetRangeAsync(Enum.SortDirection.Ascending, batchSize)
@@ -270,9 +271,15 @@ function QueueManager:GetQueuedPlayers(mode: string, subMode: string): { number 
 
 	if success and result then
 		for _, entry in result do
-			local data = HttpService:JSONDecode(entry.value)
-			table.insert(players, data.UserId)
+			local ok, data = pcall(HttpService.JSONDecode, HttpService, entry.value)
+			if ok and data and data.UserId then
+				table.insert(players, data.UserId)
+			else
+				warn("Skipped bad queue entry: " .. entry.key)
+			end
 		end
+	else
+		warn("Failed to get queue range for " .. mode .. "_" .. subMode)
 	end
 
 	return players
@@ -285,7 +292,9 @@ end
 -- @return number?: The join time of the player if found, otherwise nil
 function QueueManager:GetPlayerJoinTime(player: Player, mode: string, subMode: string): number?
 	local queueKey = mode .. "_" .. subMode
+
 	local key = self._data.playerQueueKeys[player.UserId] and self._data.playerQueueKeys[player.UserId][queueKey]
+
 	if not key then return nil end
 
 	local queue = getQueue(self, mode, subMode)
@@ -295,8 +304,14 @@ function QueueManager:GetPlayerJoinTime(player: Player, mode: string, subMode: s
 	end)
 
 	if success and value then
-		local data = HttpService:JSONDecode(value)
-		return data.JoinTime
+		local ok, data = pcall(HttpService.JSONDecode, HttpService, value)
+		if ok and data and data.JoinTime then
+			return data.JoinTime
+		else
+			warn("Failed to decode join time for " .. tostring(player.UserId))
+		end
+	else
+		warn("Failed to get async for key: " .. key)
 	end
 
 	return nil
@@ -341,9 +356,7 @@ end
 
 -- RunHeartbeat(): Runs cache cleanup on heartbeat
 function QueueManager:RunHeartbeat(): ()
-	if tick() - self._data.lastCacheCleanup > QueueManager.Modules.Settings.Matches.CACHE_CLEANUP_INTERVAL then
-		cleanupCaches(self)
-	end
+	cleanupCaches(self)
 end
 
 --=========================
@@ -353,6 +366,7 @@ end
 -- Cleanup(): Cleans up queue-specific data
 function QueueManager:Cleanup(): ()
 	self._data.queueCache = {}
+	self._data.localQueueCounts = {}
 	self._data.playerQueueKeys = {}
 end
 

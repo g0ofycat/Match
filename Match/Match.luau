@@ -193,7 +193,7 @@ end
 -- // CLEANUP
 --=========================
 
--- CleanupInit(): Connect all events related to cleanup
+-- CleanupInit(): Initializes cleanup hooks
 function Match:CleanupInit(): ()
 	Players.PlayerRemoving:Connect(function(player)
 		if player then
@@ -205,8 +205,14 @@ function Match:CleanupInit(): ()
 		Match:Cleanup()
 	end)
 
+	local interval = Match.SubModules.QueueManager.Modules.Settings.Matches.CACHE_CLEANUP_INTERVAL or 60
+	local lastTick = tick()
+
 	Match.Data.heartbeatConnection = RunService.Heartbeat:Connect(function()
-		Match.SubModules.QueueManager:RunHeartbeat()
+		if tick() - lastTick >= interval then
+			Match.SubModules.QueueManager:RunHeartbeat()
+			lastTick = tick()
+		end
 	end)
 end
 
