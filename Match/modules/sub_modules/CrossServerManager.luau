@@ -1,20 +1,6 @@
 --!strict
 
-local CrossServerManager = {
-	_data = {
-		crossServerData = {},
-		isProcessingMatch = {},
-		localQueueCounts = {},
-		matchmakingTasks = {},
-		playerQueueKeys = {},
-		queueCache = {},
-		messagingConnections = {},
-
-		lastCacheCleanup = 0,
-		heartbeatConnection = nil,
-		_lockMap = nil :: MemoryStoreSortedMap?
-	}
-}
+local CrossServerManager = {}
 
 --=========================
 -- // SERVICES
@@ -45,7 +31,7 @@ CrossServerManager.Modules = {
 --=========================
 
 -- Initialize(): Init function for this module
--- @param matchData: Match.Data
+-- @param matchData: Types.MatchData
 function CrossServerManager:Initialize(matchData: Types.MatchData): ()
 	assert(matchData, "[CrossServerManager:Initialize]: 'matchData' is nil")
 
@@ -172,7 +158,10 @@ function CrossServerManager:SendQueueStatus(mode: string, subMode: string, targe
 			UserId = data.UserId,
 			ELO = data.ELO,
 			JoinTime = data.JoinTime,
-			QueueKey = entry.key
+			QueueKey = {
+				Mode = mode,
+				SubMode = subMode
+			}
 		})
 	end
 
@@ -190,24 +179,26 @@ function CrossServerManager:SendQueueStatus(mode: string, subMode: string, targe
 end
 
 -- ReceiveQueueStatus(): Stores the Cross Server data for MessagingService to use and broadcast to servers
--- @param data: QueueStatusResponseData
+-- @param data: Types.QueueStatusResponseData
 function CrossServerManager:ReceiveQueueStatus(data: Types.QueueStatusResponseData): ()
-	local queueKey = data.Mode .. "_" .. data.SubMode
-
-	if not self._data.crossServerData[queueKey] then
-		self._data.crossServerData[queueKey] = {}
+	if not self._data.crossServerData[data.Mode] then
+		self._data.crossServerData[data.Mode] = {}
 	end
 
-	self._data.crossServerData[queueKey][data.SendingServer] = {
+	if not self._data.crossServerData[data.Mode][data.SubMode] then
+		self._data.crossServerData[data.Mode][data.SubMode] = {}
+	end
+
+	self._data.crossServerData[data.Mode][data.SubMode][data.SendingServer] = {
 		Players = data.Players,
 		Timestamp = data.Timestamp
 	}
 
 	local now = tick()
 
-	for serverId, serverData in self._data.crossServerData[queueKey] do
+	for serverId, serverData in self._data.crossServerData[data.Mode][data.SubMode] do
 		if now - serverData.Timestamp > CrossServerManager.Modules.Settings.Matches.CROSS_SERVER_DATA_TTL then
-			self._data.crossServerData[queueKey][serverId] = nil
+			self._data.crossServerData[data.Mode][data.SubMode][serverId] = nil
 		end
 	end
 end

@@ -39,7 +39,7 @@ local Types = require(HelpersPath.Types)
 --=========================
 
 Match.Helpers = {
-    Settings = require(HelpersPath.Settings), -- // Handles core info like modes, subModes, etc
+    Settings = require(HelpersPath.Settings)
 }
 
 --=========================
@@ -50,7 +50,7 @@ Match.SubModules = {
     QueueManager = require(SubModulesPath.QueueManager),
     CrossServerManager = require(SubModulesPath.CrossServerManager),
     MatchmakingEngine = require(SubModulesPath.MatchmakingEngine),
-    TeleportHandler = require(SubModulesPath.TeleportHandler),
+    TeleportHandler = require(SubModulesPath.TeleportHandler)
 }
 
 --=========================

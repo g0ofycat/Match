@@ -4,6 +4,11 @@
 -- // TYPES
 --=========================
 
+export type QueueKey = {
+    Mode: string,
+    SubMode: string
+}
+
 export type PlayerQueueData = {
 	UserId: number,
 	ELO: number,
@@ -27,7 +32,8 @@ export type ParsedPlayerData = {
 	UserId: number,
 	ELO: number,
 	JoinTime: number,
-	QueueKey: string,
+	QueueKey: QueueKey,
+	MemoryStoreKey: string,
 	ServerId: string,
 	Continent: string
 }
@@ -41,7 +47,7 @@ export type CrossServerPlayer = {
 	UserId: number,
 	ELO: number,
 	JoinTime: number,
-	QueueKey: string
+	QueueKey: QueueKey
 }
 
 export type CrossServerData = {
@@ -60,20 +66,20 @@ export type TeleportRequestData = {
 }
 
 export type MatchData = {
-	playerQueueKeys: { [number]: { [string]: string } }, -- // UserId -> QueueKey -> MemoryStore Key
-	localQueueCounts: { [string]: number }, -- // QueueKey -> Count
-	isProcessingMatch: { [string]: boolean }, -- // QueueKey -> Processing Status
+	playerQueueKeys: { [number]: { [string]: { [string]: string } } }, -- // UserId -> Mode -> SubMode -> MemoryStoreKey (string)
+	localQueueCounts: { [string]: { [string]: number } }, -- // Mode -> SubMode -> Count
+	isProcessingMatch: { [string]: { [string]: boolean } }, -- // Mode -> SubMode -> Processing Status
 
-	crossServerData: { [string]: { [string]: CrossServerData } }, -- // QueueKey -> ServerId -> Data
+	crossServerData: { [string]: { [string]: { [string]: CrossServerData } } }, -- // Mode -> SubMode -> ServerId -> Data
 
-	matchmakingTasks: { [string]: thread }, -- // QueueKey -> Thread
+	matchmakingTasks: { [string]: { [string]: thread } }, -- // Mode -> SubMode -> Thread
 
-	queueCache: { [string]: QueueCacheEntry }, -- // QueueKey -> Cache Entry
+	queueCache: { [string]: { [string]: QueueCacheEntry } }, -- // Mode -> SubMode -> Cache Entry
 	messagingConnections: { [string]: RBXScriptConnection }, -- // Handler Key -> Connection
 
 	lastCacheCleanup: number,
 	heartbeatConnection: RBXScriptConnection?,
-	_lockMap: MemoryStoreSortedMap? -- // Cached lock map
+	_lockMap: MemoryStoreSortedMap?
 }
 
 return nil

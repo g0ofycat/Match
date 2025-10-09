@@ -57,7 +57,8 @@ PlayerLocation.continentMap = {
 	["AR"] = "SA", ["BO"] = "SA", ["BR"] = "SA", ["CL"] = "SA", ["CO"] = "SA", ["EC"] = "SA",
 	["FK"] = "SA", ["GF"] = "SA", ["GY"] = "SA", ["PY"] = "SA", ["PE"] = "SA", ["SR"] = "SA",
 	["UY"] = "SA", ["VE"] = "SA",
-	["AQ"] = "AN",
+	-- // ANTARCTICA (AN)
+	["AQ"] = "AN"
 }
 
 PlayerLocation.continentCache = {}
