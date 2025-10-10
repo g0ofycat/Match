@@ -1,6 +1,6 @@
 # Match (Roblox)
 
-A customizable matchmaking system for Roblox games with **extremely** easy-to-use API. Handles queueing, grouping, ELO balancing, continent grouping, and cross-server match creation; Handles edge cases well. **(NOTE: Must be used on the server since this uses MemoryStoreService and MessagingService)**
+A customizable matchmaking system for Roblox games with **extremely** easy-to-use API. Handles queueing, grouping, ELO balancing, continent grouping, and cross-server match creation; Handles edge cases well. **(NOTE: Must be used on the server since this uses MemoryStoreService and MessagingService; The print statements from matchmaking use the local queue count since you don't want to use MemoryStore calls on prints)**
 
 ## Features & Design Choices
 
