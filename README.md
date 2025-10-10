@@ -62,7 +62,7 @@ Settings.Matches = {
 
 	-- // LOCKING
 
-	LOCK_TIMEOUT = 10, -- // How long 'Locking' lives before being removed. Locking is a state that tells servers that the player is in the match so the edge case where 2 servers try to match make someone that is going to / is in a match
+	LOCK_TIMEOUT = 10, -- // How long 'Locking' lives before being removed. Locking is a state that tells servers that the player is in a match so the edge case where 2 servers try to match make someone at the same time doesn't happen
 }
 
 Settings.Information = {

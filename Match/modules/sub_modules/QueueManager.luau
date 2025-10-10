@@ -15,6 +15,11 @@ local HttpService = game:GetService("HttpService")
 
 local Types = require(script.Parent.Parent.helpers.Types)
 
+export type QueueManagerT = typeof(QueueManager) & {
+	_data: Types.MatchData,
+	[any]: any
+}
+
 --=========================
 -- // MODULES
 --=========================
@@ -31,102 +36,22 @@ QueueManager.Modules = {
 -- Initialize(): Init function for this module
 -- @param matchData: Types.MatchData
 function QueueManager:Initialize(matchData: Types.MatchData): ()
-	assert(matchData, "[QueueManager:Initialize]: 'matchData' is nil");
+	assert(matchData, "[QueueManager:Initialize]: 'matchData' is nil")
 
-	(self :: any)._data = matchData
+	self._data = matchData
 end
 
 --=========================
 -- // PRIVATE API
 --=========================
 
--- getQueue(): Returns the MemoryStoreService SortedMap based on the mode and subMode
--- @param mode: The mode to get
--- @param subMode: The subMode of the mode
--- @return MemoryStoreSortedMap
-local function getQueue(self: any, mode: string, subMode: string): MemoryStoreSortedMap
-	local queueKey = {
-		Mode = mode,
-		SubMode = subMode
-	}
-
-	if not self._data.queueCache[queueKey.Mode] then
-    	self._data.queueCache[queueKey.Mode] = {}
-	end
-
-	if not self._data.queueCache[queueKey.Mode][queueKey.SubMode] then
-		self._data.queueCache[queueKey.Mode][queueKey.SubMode] = {
-			queue = MemoryStoreService:GetSortedMap("MatchQueue_" .. queueKey.Mode .. "_" .. queueKey.SubMode),
-			lastUsed = tick()
-		}
-	else
-		self._data.queueCache[queueKey.Mode][queueKey.SubMode].lastUsed = tick()
-	end
-
-	return self._data.queueCache[queueKey.Mode][queueKey.SubMode].queue
-end
-
--- getLockMap(): Returns 'MatchLocks' (MemoryStoreService SortedMap)
-local function getLockMap(self: any): MemoryStoreSortedMap
-	if not self._data._lockMap then
-		self._data._lockMap = MemoryStoreService:GetSortedMap("MatchLocks")
-	end
-
-	return self._data._lockMap :: MemoryStoreSortedMap
-end
-
--- cleanupCaches(): Cleans up all caches
-local function cleanupCaches(self: any): ()
-	local now = tick()
-
-	for mode, subModes in self._data.queueCache do
-		for subMode, cacheData in subModes do
-			if now - cacheData.lastUsed > QueueManager.Modules.Settings.Matches.CACHE_CLEANUP_INTERVAL then
-				self._data.queueCache[mode][subMode] = nil
-			end
-		end
-
-		if next(self._data.queueCache[mode]) == nil then
-			self._data.queueCache[mode] = nil
-		end
-	end
-
-	if self._data.crossServerData then
-		for mode, subModes in self._data.crossServerData do
-			for subMode, queueData in subModes do
-				local expired = {}
-
-				for serverId, serverData in queueData do
-					if now - serverData.Timestamp > QueueManager.Modules.Settings.Matches.CROSS_SERVER_DATA_TTL then
-						table.insert(expired, serverId)
-					end
-				end
-
-				for _, serverId in expired do
-					queueData[serverId] = nil
-				end
-
-				if not next(queueData) then
-					self._data.crossServerData[mode][subMode] = nil
-				end
-			end
-
-			if next(self._data.crossServerData[mode]) == nil then
-				self._data.crossServerData[mode] = nil
-			end
-		end
-	end
-
-	self._data.lastCacheCleanup = now
-end
-
 -- generatePlayerQueueData(): Returns data based on multiple parameters
 -- @param player: The Player object to generate queue data for
 -- @param ELO: The ELO of the player
 -- @param continent: The Continent of the player (Use PlayerLocation)
 -- @param subMode: The subMode
--- @return key, HttpService:JSONEncode(data)
-local function generatePlayerQueueData(player: Player, ELO: number, continent: string, subMode: string): (string, string | nil)
+-- @return key, encoded?
+local function generatePlayerQueueData(player: Player, ELO: number, continent: string, subMode: string): (string, string?)
 	local timestamp = math.floor(tick())
 	local key = string.format("%010d", timestamp) .. "_" .. tostring(player.UserId)
 
@@ -176,7 +101,7 @@ function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: strin
 		local key, data = generatePlayerQueueData(player, ELO or 0, playerContinent, subMode)
 
 		local success, err = pcall(function()
-			getQueue(self, mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
+			self:GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
 		end)
 
 		if success then
@@ -202,7 +127,7 @@ end
 function QueueManager:StopQueue(playerOrList: Player | { Player }): boolean
 	local players: { Player } = typeof(playerOrList) == "Instance" and { playerOrList } or playerOrList :: { Player }
 	local allSuccess = true
-	local lockMap = getLockMap(self)
+	local lockMap = self:GetLockMap()
 
 	for _, player in players do
 		if not player or not player.UserId then
@@ -225,7 +150,7 @@ function QueueManager:StopQueue(playerOrList: Player | { Player }): boolean
 		for mode, subModes in playerQueues do
 			for subMode, keyToRemove in subModes do
 				local success = pcall(function()
-					getQueue(self, mode, subMode):RemoveAsync(keyToRemove)
+					self:GetQueue(mode, subMode):RemoveAsync(keyToRemove)
 				end)
 
 				if not success then
@@ -280,9 +205,9 @@ end
 -- @return { number }: A list of UserIds of the queued players
 function QueueManager:GetQueuedPlayers(mode: string, subMode: string): { number }
 	local players = {}
-	local queue = getQueue(self, mode, subMode)
+	local queue = self:GetQueue(mode, subMode)
 	local matchSize = self:GetMatchSize(subMode)
-	local batchSize = matchSize :: number * QueueManager.Modules.Settings.Matches.BATCH_SIZE
+	local batchSize = math.clamp(matchSize :: number * QueueManager.Modules.Settings.Matches.BATCH_SIZE, 1, 200)
 
 	local success, result = pcall(function()
 		return queue:GetRangeAsync(Enum.SortDirection.Ascending, batchSize)
@@ -316,7 +241,7 @@ function QueueManager:GetPlayerJoinTime(player: Player, mode: string, subMode: s
 
 	if not key then return nil end
 
-	local queue = getQueue(self, mode, subMode)
+	local queue = self:GetQueue(mode, subMode)
 
 	local success, value = pcall(function()
 		return queue:GetAsync(key)
@@ -365,19 +290,80 @@ function QueueManager:GetMatchSize(subMode: string): number
 	return 2
 end
 
--- GetQueue(): Public accessor for queue
+-- GetQueue(): Returns the MemoryStoreService SortedMap based on the mode and subMode
+-- @param mode: The mode to get
+-- @param subMode: The subMode of the mode
+-- @return MemoryStoreSortedMap
 function QueueManager:GetQueue(mode: string, subMode: string): MemoryStoreSortedMap
-	return getQueue(self, mode, subMode)
+	if not self._data.queueCache[mode] then
+    	self._data.queueCache[mode] = {}
+	end
+
+	if not self._data.queueCache[mode][subMode] then
+		self._data.queueCache[mode][subMode] = {
+			queue = MemoryStoreService:GetSortedMap("MatchQueue_" .. mode .. "_" .. subMode),
+			lastUsed = tick()
+		}
+	else
+		self._data.queueCache[mode][subMode].lastUsed = tick()
+	end
+
+	return self._data.queueCache[mode][subMode].queue
 end
 
--- GetLockMap(): Public accessor for lock map
+-- GetLockMap(): Returns MatchLocks
+-- @return MemoryStoreSortedMap
 function QueueManager:GetLockMap(): MemoryStoreSortedMap
-	return getLockMap(self)
+	if not self._data._lockMap then
+		self._data._lockMap = MemoryStoreService:GetSortedMap("MatchLocks")
+	end
+
+	return self._data._lockMap
 end
 
 -- RunHeartbeat(): Runs cache cleanup on heartbeat
 function QueueManager:RunHeartbeat(): ()
-	cleanupCaches(self)
+	local now = tick()
+
+	for mode, subModes in self._data.queueCache do
+		for subMode, cacheData in subModes do
+			if now - cacheData.lastUsed > QueueManager.Modules.Settings.Matches.CACHE_CLEANUP_INTERVAL then
+				self._data.queueCache[mode][subMode] = nil
+			end
+		end
+
+		if next(self._data.queueCache[mode]) == nil then
+			self._data.queueCache[mode] = nil
+		end
+	end
+
+	if self._data.crossServerData then
+		for mode, subModes in self._data.crossServerData do
+			for subMode, queueData in subModes do
+				local expired = {}
+
+				for serverId, serverData in queueData do
+					if now - serverData.Timestamp > QueueManager.Modules.Settings.Matches.CROSS_SERVER_DATA_TTL then
+						table.insert(expired, serverId)
+					end
+				end
+
+				for _, serverId in expired do
+					queueData[serverId] = nil
+				end
+
+				if not next(queueData) then
+					self._data.crossServerData[mode][subMode] = nil
+				end
+			end
+
+			if next(self._data.crossServerData[mode]) == nil then
+				self._data.crossServerData[mode] = nil
+			end
+		end
+	end
+
+	self._data.lastCacheCleanup = now
 end
 
 --=========================
@@ -391,4 +377,4 @@ function QueueManager:Cleanup(): ()
 	self._data.playerQueueKeys = {}
 end
 
-return QueueManager
+return QueueManager :: QueueManagerT

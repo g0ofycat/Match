@@ -16,6 +16,11 @@ local HttpService = game:GetService("HttpService")
 
 local Types = require(script.Parent.Parent.helpers.Types)
 
+export type CrossServerManagerT = typeof(CrossServerManager) & {
+	_data: Types.MatchData,
+	[any]: any
+}
+
 --=========================
 -- // MODULES
 --=========================
@@ -52,10 +57,11 @@ function CrossServerManager:SetupMessagingService(): ()
 
 	self._data.messagingConnections = {}
 
-	local function subscribe(channel: string, handlerKey: string, handler: ({ Data: any }) -> ()): ()
+	local function subscribe(channel: string, handlerKey: string, handler: ({ Data: Types.MessagedData }) -> ()): ()
 		local ok, conn = pcall(function()
 			return MessagingService:SubscribeAsync(channel, handler)
 		end)
+
 		if ok then
 			self._data.messagingConnections[handlerKey] = conn
 		end
@@ -65,27 +71,30 @@ function CrossServerManager:SetupMessagingService(): ()
 	local serverId = settings.Information.SERVER_ID
 
 	subscribe("MatchmakingRequest", "matchmakingRequest", function(msg)
-		local d = msg.Data
-		if d.Mode and d.SubMode and d.RequestingServer ~= serverId then
+		local data = msg.Data
+
+		if data.Mode and data.SubMode and data.RequestingServer ~= serverId then
 			task.spawn(function()
-				self:SendQueueStatus(d.Mode, d.SubMode, d.RequestingServer)
+				self:SendQueueStatus(data.Mode, data.SubMode, data.RequestingServer)
 			end)
 		end
 	end)
 
 	subscribe("CrossServerTeleport", "crossServerTeleport", function(msg)
-		local d = msg.Data
-		if d.PlayersForServer and d.PlayersForServer[serverId] then
+		local data = msg.Data
+
+		if data.PlayersForServer and data.PlayersForServer[serverId] then
 			task.spawn(function()
-				CrossServerManager.Modules.TeleportHandler:HandleTeleportRequest(d)
+				CrossServerManager.Modules.TeleportHandler:HandleTeleportRequest(data)
 			end)
 		end
 	end)
 
 	subscribe("QueueStatusResponse", "queueStatusResponse", function(msg)
-		local d = msg.Data
-		if d.TargetServer == serverId then
-			self:ReceiveQueueStatus(d)
+		local data = msg.Data
+
+		if data.TargetServer == serverId then
+			self:ReceiveQueueStatus(data)
 		end
 	end)
 end
@@ -113,7 +122,7 @@ function CrossServerManager:SendQueueStatus(mode: string, subMode: string, targe
 	local players = {}
 	local matchSize = CrossServerManager.Modules.QueueManager:GetMatchSize(subMode)
 	local maxPlayersPerQueueStatus = CrossServerManager.Modules.Settings.Matches.MAX_QUEUE_STATUS_PLAYERS or 50
-	local maxPlayers = math.min(maxPlayersPerQueueStatus, matchSize * 3)
+	local maxPlayers = math.clamp(math.min(maxPlayersPerQueueStatus, matchSize * 3), 1, 200)
 
 	local success, result = pcall(function()
 		return queue:GetRangeAsync(Enum.SortDirection.Ascending, maxPlayers)
@@ -222,4 +231,4 @@ function CrossServerManager:Cleanup(): ()
 	end
 end
 
-return CrossServerManager
+return CrossServerManager :: CrossServerManagerT

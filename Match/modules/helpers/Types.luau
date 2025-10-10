@@ -1,7 +1,7 @@
 --!strict
 
 --=========================
--- // TYPES
+-- // MATCHMAKING TYPES
 --=========================
 
 export type QueueKey = {
@@ -63,6 +63,15 @@ export type TeleportRequestData = {
     Mode: string,
     SubMode: string,
     Timestamp: number
+}
+
+export type MessagedData = {
+	Mode: string,
+	SubMode: string,
+	RequestingServer: string,
+	Timestamp: number,
+	PlayersForServer: { [string]: { number } },
+	TargetServer: string
 }
 
 export type MatchData = {

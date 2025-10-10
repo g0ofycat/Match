@@ -15,6 +15,10 @@ local TeleportService = game:GetService("TeleportService")
 
 local Types = require(script.Parent.Parent.helpers.Types)
 
+export type TeleportHandlerT = typeof(TeleportHandler) & {
+	[any]: any
+}
+
 --=========================
 -- // MODULES
 --=========================
@@ -29,7 +33,7 @@ TeleportHandler.Modules = {
 --=========================
 
 -- HandleTeleportRequest(): Handles a teleport request by teleporting players to a reserved private server for a cross-server match, with retries and backoff
--- @param data: The teleport data (includes PlaceId, ServerCode, PlayersForServer, MatchId, Mode, SubMode)
+-- @param data: Types.TeleportRequestData
 function TeleportHandler:HandleTeleportRequest(data: Types.TeleportRequestData): ()
 	local serverId = TeleportHandler.Modules.Settings.Information.SERVER_ID
 	local playerIds = data.PlayersForServer[serverId]
@@ -98,8 +102,23 @@ function TeleportHandler:HandleTeleportRequest(data: Types.TeleportRequestData):
 	end
 end
 
+-- ReserveMatchServer(): Reserves a server for the match
+-- @return string?: Server code on success, nil on failure
+function TeleportHandler:ReserveMatchServer(): string?
+	local success, result = pcall(function()
+		return TeleportService:ReserveServer(TeleportHandler.Modules.Settings.Information.PLACE_ID)
+	end)
+
+	if not success or not result then
+		warn("Failed to reserve server:", result)
+		return nil
+	end
+
+	return result
+end
+
 -- UnlockPlayers(): Unlocks players in the lockMap to allow re-queuing or other operations
--- @param playerIds: The user IDs of players to unlock
+-- @param playerIds: The UserIDs of players to unlock
 function TeleportHandler:UnlockPlayers(playerIds: { number }): ()
 	local lockMap = TeleportHandler.Modules.QueueManager:GetLockMap()
 
@@ -110,4 +129,4 @@ function TeleportHandler:UnlockPlayers(playerIds: { number }): ()
 	end
 end
 
-return TeleportHandler
+return TeleportHandler :: TeleportHandlerT
