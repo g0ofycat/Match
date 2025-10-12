@@ -37,65 +37,67 @@ TeleportHandler.Modules = {
 function TeleportHandler:HandleTeleportRequest(data: Types.TeleportRequestData): ()
 	local serverId = TeleportHandler.Modules.Settings.Information.SERVER_ID
 	local playerIds = data.PlayersForServer[serverId]
+
 	if not playerIds then return end
 
 	local playersToTeleport = {}
+
 	for _, userId in playerIds do
 		local player = Players:GetPlayerByUserId(userId)
+
 		if player then
 			table.insert(playersToTeleport, player)
 		end
 	end
 
 	if #playersToTeleport == 0 then return end
+
 	print("Teleporting", #playersToTeleport, "players to cross-server match")
 
-	local playersToRetry = playersToTeleport
 	local maxRetries = TeleportHandler.Modules.Settings.Matches.TELEPORT_RETRIES
 
 	for attempt = 1, maxRetries do
-		if #playersToRetry == 0 then break end
+		if #playersToTeleport == 0 then return end
 
-		local success = pcall(function()
+		local success, err = pcall(function()
 			TeleportService:TeleportToPrivateServer(
 				data.PlaceId,
 				data.ServerCode,
-				playersToRetry,
+				playersToTeleport,
 				nil,
-				{
-					MatchId = data.MatchId,
-					Mode = data.Mode,
-					SubMode = data.SubMode
-				}
+				{ MatchId = data.MatchId, Mode = data.Mode, SubMode = data.SubMode }
 			)
 		end)
 
 		if success then
-			print(`Successfully teleported {#playersToRetry} players on attempt {attempt}`)
-			playersToRetry = {}
-			break
+			print(`Successfully teleported {#playersToTeleport} players on attempt {attempt}`)
+			return
 		else
-			local stillValidPlayers = {}
-			for _, player in playersToRetry do
-				if player.Parent and Players:GetPlayerByUserId(player.UserId) then
-					table.insert(stillValidPlayers, player)
-				end
-			end
-			playersToRetry = stillValidPlayers
+			print(`Attempt {attempt} failed: {err}, retrying {#playersToTeleport} players`)
+		end
 
-			if attempt < maxRetries and #playersToRetry > 0 then
-				task.wait(0.5 + (attempt * 0.2))
+		local stillValid = {}
+
+		for _, player in playersToTeleport do
+			if player.Parent == Players then
+				table.insert(stillValid, player)
 			end
+		end
+
+		playersToTeleport = stillValid
+
+		if attempt < maxRetries and #playersToTeleport > 0 then
+			task.wait(0.5 * (1 + attempt * 0.5))
 		end
 	end
 
-	if #playersToRetry > 0 then
-		warn(`Failed to teleport {#playersToRetry} players after {maxRetries} attempts`)
+	if #playersToTeleport > 0 then
+		warn(`Failed to teleport {#playersToTeleport} players after {maxRetries} attempts`)
 
 		local failedIds = {}
 
-		for _, player in playersToRetry do
-			table.insert(failedIds, player.UserId)
+		for _, p in playersToTeleport do
+			table.insert(failedIds, p.UserId)
 		end
 
 		self:UnlockPlayers(failedIds)

@@ -49,19 +49,17 @@ end
 -- @param player: The Player object to generate queue data for
 -- @param ELO: The ELO of the player
 -- @param continent: The Continent of the player (Use PlayerLocation)
--- @param subMode: The subMode
--- @return key, encoded?
-local function generatePlayerQueueData(player: Player, ELO: number, continent: string, subMode: string): (string, string?)
-	local timestamp = math.floor(tick())
-	local key = string.format("%010d", timestamp) .. "_" .. tostring(player.UserId)
+-- @return key, encoded? (JSON Encoded PlayerQueueData)
+local function generatePlayerQueueData(player: Player, ELO: number, continent: string): (string, string?)
+	local timestamp = tick()
+	local key = HttpService:GenerateGUID(false)
 
 	local data: Types.PlayerQueueData = {
 		UserId = player.UserId,
 		ELO = ELO,
 		JoinTime = timestamp,
 		ServerId = QueueManager.Modules.Settings.Information.SERVER_ID,
-		Continent = continent,
-		SubMode = subMode
+		Continent = continent
 	}
 
 	local success, encoded = pcall(HttpService.JSONEncode, HttpService, data)
@@ -98,7 +96,7 @@ function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: strin
 		end
 
 		local playerContinent = QueueManager.Modules.PlayerLocation.GetPlayerContinent(player) :: string
-		local key, data = generatePlayerQueueData(player, ELO or 0, playerContinent, subMode)
+		local key, data = generatePlayerQueueData(player, ELO or 0, playerContinent)
 
 		local success, err = pcall(function()
 			self:GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
@@ -216,6 +214,7 @@ function QueueManager:GetQueuedPlayers(mode: string, subMode: string): { number 
 	if success and result then
 		for _, entry in result do
 			local ok, data = pcall(HttpService.JSONDecode, HttpService, entry.value)
+
 			if ok and data and data.UserId then
 				table.insert(players, data.UserId)
 			else
@@ -249,6 +248,7 @@ function QueueManager:GetPlayerJoinTime(player: Player, mode: string, subMode: s
 
 	if success and value then
 		local ok, data = pcall(HttpService.JSONDecode, HttpService, value)
+
 		if ok and data and data.JoinTime then
 			return data.JoinTime
 		else

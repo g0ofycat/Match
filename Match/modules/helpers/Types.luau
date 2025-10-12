@@ -14,8 +14,7 @@ export type PlayerQueueData = {
 	ELO: number,
 	JoinTime: number,
 	ServerId: string,
-	Continent: string,
-	SubMode: string
+	Continent: string
 }
 
 export type QueueStatusResponseData = {

@@ -113,6 +113,32 @@ function CrossServerManager:RequestCrossServerMatchmaking(mode: string, subMode:
 	end)
 end
 
+-- NotifyServersOfMatch(): Notifies all servers about the new match
+-- @param code: Reserved server code
+-- @param playersByServer: Players organized by server ID
+-- @param queueKey: The key of the queue
+-- @return boolean: True on success, false on failure
+function CrossServerManager:NotifyServersOfMatch(code: string, playersByServer: { [string]: { number } }, queueKey: Types.QueueKey): boolean
+	local success, err = pcall(function()
+		MessagingService:PublishAsync("CrossServerTeleport", {
+			MatchId = CrossServerManager.Modules.Settings.Information.SERVER_ID,
+			ServerCode = code,
+			PlaceId = CrossServerManager.Modules.Settings.Information.PLACE_ID,
+			PlayersForServer = playersByServer,
+			Mode = queueKey.Mode,
+			SubMode = queueKey.SubMode,
+			Timestamp = tick()
+		})
+	end)
+
+	if not success then
+		warn("Failed to notify servers:", err)
+		return false
+	end
+
+	return true
+end
+
 -- SendQueueStatus(): Sends all of the information in the MemoryStore sorted map and broadcasts it to QueueStatusResponse
 -- @param mode: The mode to send
 -- @param subMode: The subMode of the mode
@@ -145,9 +171,7 @@ function CrossServerManager:SendQueueStatus(mode: string, subMode: string, targe
 	end
 
 	for _, entry in result do
-		local dataSuccess, data = pcall(function()
-			return HttpService:JSONDecode(entry.value)
-		end)
+		local dataSuccess, data = pcall(HttpService.JSONDecode, HttpService, entry.value)
 
 		if not dataSuccess or not data then
 			continue

@@ -100,7 +100,7 @@ function Match:StopQueue(playerOrList: Player | { Player }): boolean
 	return Match.SubModules.QueueManager:StopQueue(playerOrList)
 end
 
--- MatchMake(): Globally handles and checks all players elligble for Matchmaking based on their Mode and subMode and teleports them
+-- MatchMake(): Globally handles and checks all players eligible for Matchmaking based on their Mode and subMode and teleports them
 -- @param mode: The mode the player should be queued to (Match.Helpers.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Helpers.Settings.SubModes)
 function Match:MatchMake(mode: string, subMode: string): ()
@@ -115,33 +115,6 @@ end
 -- StopMatchmaking(): Stops all currently running matchmaking loops that were started with StartMatchmaking; Cancels all tasks and clears the internal task table
 function Match:StopMatchmaking(): ()
 	Match.SubModules.MatchmakingEngine:StopMatchmaking()
-end
-
--- RequestCrossServerMatchmaking(): A wrapper for 'MatchmakingRequest' :PublishAsync()
--- @param mode: The mode to request
--- @param subMode: The subMode of the mode
-function Match:RequestCrossServerMatchmaking(mode: string, subMode: string): ()
-	Match.SubModules.CrossServerManager:RequestCrossServerMatchmaking(mode, subMode)
-end
-
--- SendQueueStatus(): Sends all of the information in the MemoryStore sorted map and broadcasts it to QueueStatusResponse
--- @param mode: The mode to send
--- @param subMode: The subMode of the mode
--- @param targetServer: The server to send the status to
-function Match:SendQueueStatus(mode: string, subMode: string, targetServer: string): ()
-	Match.SubModules.CrossServerManager:SendQueueStatus(mode, subMode, targetServer)
-end
-
--- ReceiveQueueStatus(): Stores the Cross Server data for MessagingService to use and broadcast to servers
--- @param data: QueueStatusResponseData
-function Match:ReceiveQueueStatus(data: Types.QueueStatusResponseData): ()
-	Match.SubModules.CrossServerManager:ReceiveQueueStatus(data)
-end
-
--- HandleTeleportRequest(): Handles a teleport request by teleporting players to a reserved private server for a cross-server match, with retries and backoff
--- @param data: The teleport data (includes PlaceId, ServerCode, PlayersForServer, MatchId, Mode, SubMode)
-function Match:HandleTeleportRequest(data: Types.TeleportRequestData): ()
-	Match.SubModules.TeleportHandler:HandleTeleportRequest(data)
 end
 
 --=========================

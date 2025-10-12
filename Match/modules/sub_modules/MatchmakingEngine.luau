@@ -7,7 +7,6 @@ local MatchmakingEngine = {}
 --=========================
 
 local Players = game:GetService("Players")
-local MessagingService = game:GetService("MessagingService")
 local HttpService = game:GetService("HttpService")
 
 --=========================
@@ -124,13 +123,11 @@ function MatchmakingEngine:CollectPlayers(queueKey: Types.QueueKey): { Types.Par
 end
 
 -- ParseQueueEntry(): Returns the JSON decoded entry safely
--- @param entry: The entry
+-- @param entry: The entry (MemoryStore Key & JSON Encoded PlayerQueueData)
 -- @param queueKey: Types.QueueKey
 -- @return Types.ParsedPlayerData
 function MatchmakingEngine:ParseQueueEntry(entry: any, queueKey: Types.QueueKey): Types.ParsedPlayerData
-	local success, data = pcall(function()
-		return HttpService:JSONDecode(entry.value)
-	end)
+	local success, data = pcall(HttpService.JSONDecode, HttpService, entry.value)
 
 	if not success or not data or not data.UserId or not data.ELO then
 		error("Failed to parse queue entry: " .. entry.key)
@@ -143,7 +140,7 @@ function MatchmakingEngine:ParseQueueEntry(entry: any, queueKey: Types.QueueKey)
 		QueueKey = queueKey,
 		MemoryStoreKey = entry.key,
 		ServerId = data.ServerId,
-		Continent = data.Continent or "Unknown"
+		Continent = data.Continent
 	}
 end
 
@@ -152,27 +149,25 @@ end
 -- @param subMode: The subMode
 -- @return { Types.ParsedPlayerData }?
 function MatchmakingEngine:FindOptimalPlayerGroup(allPlayers: { Types.ParsedPlayerData }, subMode: string): { Types.ParsedPlayerData }?
-	local matchSize = MatchmakingEngine.Modules.QueueManager:GetMatchSize(subMode)
+	local matchSize = self.Modules.QueueManager:GetMatchSize(subMode)
+
+	if #allPlayers < matchSize then return nil end
 
 	local continentGroups = self:GroupPlayersByContinent(allPlayers)
 
-	for continent, playersInContinent in continentGroups do
-		if #playersInContinent < matchSize then
-			continue
-		end
+	for _, players in continentGroups do
+		if #players >= matchSize then
+			self:SortPlayers(players)
 
-		self:SortPlayers(playersInContinent)
+			local bestGroup = self:FindBestGroup(players, matchSize)
 
-		local bestGroup = self:FindBestGroup(playersInContinent, matchSize)
-
-		if bestGroup then
-			return bestGroup
+			if bestGroup then
+				return bestGroup
+			end
 		end
 	end
 
-	if allPlayers and #allPlayers > 0 then
-		self:SortPlayers(allPlayers)
-	end
+	self:SortPlayers(allPlayers)
 
 	return self:FindBestGroup(allPlayers, matchSize)
 end
@@ -184,7 +179,7 @@ function MatchmakingEngine:GroupPlayersByContinent(players: { Types.ParsedPlayer
 	local groups = {}
 
 	for _, player in players do
-		local cont = player.Continent or "Unknown"
+		local cont = player.Continent
 		groups[cont] = groups[cont] or {}
 		table.insert(groups[cont], player)
 	end
@@ -199,6 +194,7 @@ function MatchmakingEngine:SortPlayers(players: { Types.ParsedPlayerData }): ()
 		if MatchmakingEngine.Modules.Settings.Matches.PRIORITIZE_WAIT_TIME and a.JoinTime ~= b.JoinTime then
 			return a.JoinTime < b.JoinTime
 		end
+
 		return a.ELO < b.ELO
 	end)
 end
@@ -301,7 +297,7 @@ function MatchmakingEngine:CreateCrossServerMatch(players: { Types.ParsedPlayerD
 		warn(removalFailures, "queue removal failures occurred")
 	end
 
-	local notifySuccess = self:NotifyServersOfMatch(code, playersByServer, queueKey)
+	local notifySuccess = MatchmakingEngine.Modules.CrossServerManager:NotifyServersOfMatch(code, playersByServer, queueKey)
 
 	if not notifySuccess then
 		MatchmakingEngine.Modules.TeleportHandler:UnlockPlayers(lockedPlayerIds)
@@ -380,6 +376,7 @@ function MatchmakingEngine:ProcessPlayerRemoval(players: { Types.ParsedPlayerDat
 
 		local serverId = playerData.ServerId
 		playersByServer[serverId] = playersByServer[serverId] or {}
+
 		table.insert(playersByServer[serverId], playerData.UserId)
 
 		if serverId ~= MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
@@ -429,32 +426,6 @@ function MatchmakingEngine:UpdateLocalQueueCount(players: { Types.ParsedPlayerDa
 	self._data.localQueueCounts[queueKey.Mode][queueKey.SubMode] = math.max(0, (self._data.localQueueCounts[queueKey.Mode][queueKey.SubMode] or 0) - localPlayersRemoved)
 end
 
--- NotifyServersOfMatch(): Notifies all servers about the new match
--- @param code: Reserved server code
--- @param playersByServer: Players organized by server ID
--- @param queueKey: The key of the queue
--- @return boolean: True on success, false on failure
-function MatchmakingEngine:NotifyServersOfMatch(code: string, playersByServer: { [string]: { number } }, queueKey: Types.QueueKey): boolean
-	local success, err = pcall(function()
-		MessagingService:PublishAsync("CrossServerTeleport", {
-			MatchId = MatchmakingEngine.Modules.Settings.Information.SERVER_ID,
-			ServerCode = code,
-			PlaceId = MatchmakingEngine.Modules.Settings.Information.PLACE_ID,
-			PlayersForServer = playersByServer,
-			Mode = queueKey.Mode,
-			SubMode = queueKey.SubMode,
-			Timestamp = tick()
-		})
-	end)
-
-	if not success then
-		warn("Failed to notify servers:", err)
-		return false
-	end
-
-	return true
-end
-
 --=========================
 -- // PUBLIC API
 --=========================
@@ -479,7 +450,7 @@ function MatchmakingEngine:MatchMake(mode: string, subMode: string): ()
 	self._data.isProcessingMatch[queueKey.Mode][queueKey.SubMode] = true
 
 	local function errHandler(err)
-		warn("Error in CrossServerMatchMake:", err, debug.traceback())
+		warn("Matchmaking error:", err, debug.traceback())
 	end
 
 	xpcall(function()
