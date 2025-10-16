@@ -16,11 +16,6 @@ local HttpService = game:GetService("HttpService")
 
 local Types = require(script.Parent.Parent.helpers.Types)
 
-export type CrossServerManagerT = typeof(CrossServerManager) & {
-	_data: Types.MatchData,
-	[any]: any
-}
-
 --=========================
 -- // MODULES
 --=========================
@@ -44,7 +39,7 @@ function CrossServerManager:SetupMessagingService(): ()
 
 	CrossServerManager.Modules.SharedData.messagingConnections = {}
 
-	local function subscribe(channel: string, handlerKey: string, handler: ({ Data: Types.MessagedData }) -> ()): ()
+	local function subscribe(channel: string, handlerKey: string, handler: ({ Data: any }) -> ()): ()
 		local ok, conn = pcall(function()
 			return MessagingService:SubscribeAsync(channel, handler)
 		end)
@@ -248,4 +243,4 @@ end
 
 CrossServerManager:SetupMessagingService()
 
-return CrossServerManager :: CrossServerManagerT
+return CrossServerManager

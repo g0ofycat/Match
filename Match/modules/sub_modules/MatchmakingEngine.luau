@@ -15,11 +15,6 @@ local HttpService = game:GetService("HttpService")
 
 local Types = require(script.Parent.Parent.helpers.Types)
 
-export type MatchmakingEngineT = typeof(MatchmakingEngine) & {
-	_data: Types.MatchData,
-	[any]: any
-}
-
 --=========================
 -- // MODULES
 --=========================
@@ -509,4 +504,4 @@ function MatchmakingEngine:Cleanup(): ()
 	MatchmakingEngine.Modules.SharedData.isProcessingMatch = {}
 end
 
-return MatchmakingEngine :: MatchmakingEngineT
+return MatchmakingEngine

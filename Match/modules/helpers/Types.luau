@@ -64,15 +64,6 @@ export type TeleportRequestData = {
     Timestamp: number
 }
 
-export type MessagedData = {
-	Mode: string,
-	SubMode: string,
-	RequestingServer: string,
-	Timestamp: number,
-	PlayersForServer: { [string]: { number } },
-	TargetServer: string
-}
-
 export type MatchData = {
 	playerQueueKeys: { [number]: { [string]: { [string]: string } } }, -- // UserId -> Mode -> SubMode -> MemoryStoreKey (string)
 	localQueueCounts: { [string]: { [string]: number } }, -- // Mode -> SubMode -> Count

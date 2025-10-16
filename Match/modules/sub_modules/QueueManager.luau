@@ -15,11 +15,6 @@ local HttpService = game:GetService("HttpService")
 
 local Types = require(script.Parent.Parent.helpers.Types)
 
-export type QueueManagerT = typeof(QueueManager) & {
-	_data: Types.MatchData,
-	[any]: any
-}
-
 --=========================
 -- // MODULES
 --=========================
@@ -366,4 +361,4 @@ function QueueManager:Cleanup(): ()
 	QueueManager.Modules.SharedData.playerQueueKeys = {}
 end
 
-return QueueManager :: QueueManagerT
+return QueueManager

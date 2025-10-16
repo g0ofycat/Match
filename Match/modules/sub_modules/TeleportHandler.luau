@@ -15,10 +15,6 @@ local TeleportService = game:GetService("TeleportService")
 
 local Types = require(script.Parent.Parent.helpers.Types)
 
-export type TeleportHandlerT = typeof(TeleportHandler) & {
-	[any]: any
-}
-
 --=========================
 -- // MODULES
 --=========================
@@ -131,4 +127,4 @@ function TeleportHandler:UnlockPlayers(playerIds: { number }): ()
 	end
 end
 
-return TeleportHandler :: TeleportHandlerT
+return TeleportHandler
