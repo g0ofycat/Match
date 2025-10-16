@@ -27,35 +27,22 @@ export type CrossServerManagerT = typeof(CrossServerManager) & {
 
 CrossServerManager.Modules = {
 	Settings = require(script.Parent.Parent.helpers.Settings),
+	SharedData = require(script.Parent.SharedData),
 	TeleportHandler = require(script.Parent.TeleportHandler),
 	QueueManager = require(script.Parent.QueueManager)
 }
 
 --=========================
--- // INIT
---=========================
-
--- Initialize(): Init function for this module
--- @param matchData: Types.MatchData
-function CrossServerManager:Initialize(matchData: Types.MatchData): ()
-	assert(matchData, "[CrossServerManager:Initialize]: 'matchData' is nil")
-
-	self._data = matchData
-
-	self:SetupMessagingService()
-end
-
---=========================
--- // MESSAGING API
+-- // PUBLIC API
 --=========================
 
 -- SetupMessagingService(): Sets up the messaging service subscribers
 function CrossServerManager:SetupMessagingService(): ()
-	for _, c in self._data.messagingConnections do
+	for _, c in CrossServerManager.Modules.SharedData.messagingConnections do
 		c:Disconnect()
 	end
 
-	self._data.messagingConnections = {}
+	CrossServerManager.Modules.SharedData.messagingConnections = {}
 
 	local function subscribe(channel: string, handlerKey: string, handler: ({ Data: Types.MessagedData }) -> ()): ()
 		local ok, conn = pcall(function()
@@ -63,7 +50,7 @@ function CrossServerManager:SetupMessagingService(): ()
 		end)
 
 		if ok then
-			self._data.messagingConnections[handlerKey] = conn
+			CrossServerManager.Modules.SharedData.messagingConnections[handlerKey] = conn
 		end
 	end
 
@@ -214,24 +201,24 @@ end
 -- ReceiveQueueStatus(): Stores the Cross Server data for MessagingService to use and broadcast to servers
 -- @param data: Types.QueueStatusResponseData
 function CrossServerManager:ReceiveQueueStatus(data: Types.QueueStatusResponseData): ()
-	if not self._data.crossServerData[data.Mode] then
-		self._data.crossServerData[data.Mode] = {}
+	if not CrossServerManager.Modules.SharedData.crossServerData[data.Mode] then
+		CrossServerManager.Modules.SharedData.crossServerData[data.Mode] = {}
 	end
 
-	if not self._data.crossServerData[data.Mode][data.SubMode] then
-		self._data.crossServerData[data.Mode][data.SubMode] = {}
+	if not CrossServerManager.Modules.SharedData.crossServerData[data.Mode][data.SubMode] then
+		CrossServerManager.Modules.SharedData.crossServerData[data.Mode][data.SubMode] = {}
 	end
 
-	self._data.crossServerData[data.Mode][data.SubMode][data.SendingServer] = {
+	CrossServerManager.Modules.SharedData.crossServerData[data.Mode][data.SubMode][data.SendingServer] = {
 		Players = data.Players,
 		Timestamp = data.Timestamp
 	}
 
 	local now = tick()
 
-	for serverId, serverData in self._data.crossServerData[data.Mode][data.SubMode] do
+	for serverId, serverData in CrossServerManager.Modules.SharedData.crossServerData[data.Mode][data.SubMode] do
 		if now - serverData.Timestamp > CrossServerManager.Modules.Settings.Matches.CROSS_SERVER_DATA_TTL then
-			self._data.crossServerData[data.Mode][data.SubMode][serverId] = nil
+			CrossServerManager.Modules.SharedData.crossServerData[data.Mode][data.SubMode][serverId] = nil
 		end
 	end
 end
@@ -242,17 +229,23 @@ end
 
 -- Cleanup(): Cleans up cross-server specific data
 function CrossServerManager:Cleanup(): ()
-	for _, connection in self._data.messagingConnections do
+	for _, connection in CrossServerManager.Modules.SharedData.messagingConnections do
 		pcall(function()
 			connection:Disconnect()
 		end)
 	end
 
-	self._data.messagingConnections = {}
+	CrossServerManager.Modules.SharedData.messagingConnections = {}
 
-	if self._data.crossServerData then
-		self._data.crossServerData = {}
+	if CrossServerManager.Modules.SharedData.crossServerData then
+		CrossServerManager.Modules.SharedData.crossServerData = {}
 	end
 end
+
+--=========================
+-- // INIT
+--=========================
+
+CrossServerManager:SetupMessagingService()
 
 return CrossServerManager :: CrossServerManagerT

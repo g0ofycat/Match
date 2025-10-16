@@ -26,20 +26,9 @@ export type QueueManagerT = typeof(QueueManager) & {
 
 QueueManager.Modules = {
 	Settings = require(script.Parent.Parent.helpers.Settings),
-	PlayerLocation = require(script.Parent.Parent.helpers.PlayerLocation)
+	SharedData = require(script.Parent.SharedData),
+	PlayerLocation = require(script.Parent.Parent.helpers.PlayerLocation),
 }
-
---=========================
--- // INIT
---=========================
-
--- Initialize(): Init function for this module
--- @param matchData: Types.MatchData
-function QueueManager:Initialize(matchData: Types.MatchData): ()
-	assert(matchData, "[QueueManager:Initialize]: 'matchData' is nil")
-
-	self._data = matchData
-end
 
 --=========================
 -- // PRIVATE API
@@ -88,9 +77,9 @@ function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: strin
 	local players: { Player } = typeof(playerOrList) == "Instance" and { playerOrList } or playerOrList :: { Player }
 
 	for _, player in players do
-		if self._data.playerQueueKeys[player.UserId]
-			and self._data.playerQueueKeys[player.UserId][mode]
-			and self._data.playerQueueKeys[player.UserId][mode][subMode] then
+		if QueueManager.Modules.SharedData.playerQueueKeys[player.UserId]
+			and QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode]
+			and QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode][subMode] then
 			warn(player.Name .. " is already in the queue for mode:", mode, subMode)
 			continue
 		end
@@ -103,14 +92,14 @@ function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: strin
 		end)
 
 		if success then
-			self._data.playerQueueKeys[player.UserId] = self._data.playerQueueKeys[player.UserId] or {}
-			self._data.playerQueueKeys[player.UserId][mode] = self._data.playerQueueKeys[player.UserId][mode] or {}
-			self._data.playerQueueKeys[player.UserId][mode][subMode] = key
+			QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] or {}
+			QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode] = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode] or {}
+			QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode][subMode] = key
 
-			if not self._data.localQueueCounts[mode] then
-				self._data.localQueueCounts[mode] = {}
+			if not QueueManager.Modules.SharedData.localQueueCounts[mode] then
+				QueueManager.Modules.SharedData.localQueueCounts[mode] = {}
 			end
-			self._data.localQueueCounts[mode][subMode] = (self._data.localQueueCounts[mode][subMode] or 0) + 1
+			QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] = (QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] or 0) + 1
 
 			print("Queued player", player.Name, "for", mode, subMode, "mode. Region:", playerContinent)
 		else
@@ -133,14 +122,14 @@ function QueueManager:StopQueue(playerOrList: Player | { Player }): boolean
 			continue
 		end
 
-		local playerQueues = self._data.playerQueueKeys[player.UserId]
+		local playerQueues = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId]
 
 		if not playerQueues then
 			pcall(function()
 				lockMap:RemoveAsync(tostring(player.UserId))
 			end)
 
-			self._data.playerQueueKeys[player.UserId] = nil
+			QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] = nil
 
 			continue
 		end
@@ -157,10 +146,10 @@ function QueueManager:StopQueue(playerOrList: Player | { Player }): boolean
 					continue
 				end
 
-				if not self._data.localQueueCounts[mode] then
-					self._data.localQueueCounts[mode] = {}
+				if not QueueManager.Modules.SharedData.localQueueCounts[mode] then
+					QueueManager.Modules.SharedData.localQueueCounts[mode] = {}
 				end
-				self._data.localQueueCounts[mode][subMode] = math.max(0, (self._data.localQueueCounts[mode][subMode] or 0) - 1)
+				QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] = math.max(0, (QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] or 0) - 1)
 			end
 		end
 
@@ -168,7 +157,7 @@ function QueueManager:StopQueue(playerOrList: Player | { Player }): boolean
 			lockMap:RemoveAsync(tostring(player.UserId))
 		end)
 
-		self._data.playerQueueKeys[player.UserId] = nil
+		QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] = nil
 	end
 
 	return allSuccess
@@ -184,7 +173,7 @@ end
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
 -- @return boolean: If the player is queued or not
 function QueueManager:IsPlayerQueued(player: Player, mode: string?, subMode: string?): boolean
-	local queues = self._data.playerQueueKeys[player.UserId]
+	local queues = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId]
 
 	if not queues then
 		return false
@@ -234,9 +223,9 @@ end
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
 -- @return number?: The join time of the player if found, otherwise nil
 function QueueManager:GetPlayerJoinTime(player: Player, mode: string, subMode: string): number?
-	local key = self._data.playerQueueKeys[player.UserId]
-		and self._data.playerQueueKeys[player.UserId][mode]
-		and self._data.playerQueueKeys[player.UserId][mode][subMode]
+	local key = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId]
+		and QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode]
+		and QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode][subMode]
 
 	if not key then return nil end
 
@@ -266,11 +255,11 @@ end
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
 -- @return number: The total number of players in the queue
 function QueueManager:GetQueueCount(mode: string, subMode: string): number
-	if not self._data.localQueueCounts[mode] then
+	if not QueueManager.Modules.SharedData.localQueueCounts[mode] then
 		return 0
 	end
 
-	return self._data.localQueueCounts[mode][subMode] or 0
+	return QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] or 0
 end
 
 --=========================
@@ -295,50 +284,50 @@ end
 -- @param subMode: The subMode of the mode
 -- @return MemoryStoreSortedMap
 function QueueManager:GetQueue(mode: string, subMode: string): MemoryStoreSortedMap
-	if not self._data.queueCache[mode] then
-    	self._data.queueCache[mode] = {}
+	if not QueueManager.Modules.SharedData.queueCache[mode] then
+    	QueueManager.Modules.SharedData.queueCache[mode] = {}
 	end
 
-	if not self._data.queueCache[mode][subMode] then
-		self._data.queueCache[mode][subMode] = {
+	if not QueueManager.Modules.SharedData.queueCache[mode][subMode] then
+		QueueManager.Modules.SharedData.queueCache[mode][subMode] = {
 			queue = MemoryStoreService:GetSortedMap("MatchQueue_" .. mode .. "_" .. subMode),
 			lastUsed = tick()
 		}
 	else
-		self._data.queueCache[mode][subMode].lastUsed = tick()
+		QueueManager.Modules.SharedData.queueCache[mode][subMode].lastUsed = tick()
 	end
 
-	return self._data.queueCache[mode][subMode].queue
+	return QueueManager.Modules.SharedData.queueCache[mode][subMode].queue
 end
 
 -- GetLockMap(): Returns MatchLocks
 -- @return MemoryStoreSortedMap
 function QueueManager:GetLockMap(): MemoryStoreSortedMap
-	if not self._data._lockMap then
-		self._data._lockMap = MemoryStoreService:GetSortedMap("MatchLocks")
+	if not QueueManager.Modules.SharedData._lockMap then
+		QueueManager.Modules.SharedData._lockMap = MemoryStoreService:GetSortedMap("MatchLocks")
 	end
 
-	return self._data._lockMap
+	return QueueManager.Modules.SharedData._lockMap :: MemoryStoreSortedMap
 end
 
 -- RunHeartbeat(): Runs cache cleanup on heartbeat
 function QueueManager:RunHeartbeat(): ()
 	local now = tick()
 
-	for mode, subModes in self._data.queueCache do
+	for mode, subModes in QueueManager.Modules.SharedData.queueCache do
 		for subMode, cacheData in subModes do
 			if now - cacheData.lastUsed > QueueManager.Modules.Settings.Matches.CACHE_CLEANUP_INTERVAL then
-				self._data.queueCache[mode][subMode] = nil
+				QueueManager.Modules.SharedData.queueCache[mode][subMode] = nil
 			end
 		end
 
-		if next(self._data.queueCache[mode]) == nil then
-			self._data.queueCache[mode] = nil
+		if next(QueueManager.Modules.SharedData.queueCache[mode]) == nil then
+			QueueManager.Modules.SharedData.queueCache[mode] = nil
 		end
 	end
 
-	if self._data.crossServerData then
-		for mode, subModes in self._data.crossServerData do
+	if QueueManager.Modules.SharedData.crossServerData then
+		for mode, subModes in QueueManager.Modules.SharedData.crossServerData do
 			for subMode, queueData in subModes do
 				local expired = {}
 
@@ -353,17 +342,17 @@ function QueueManager:RunHeartbeat(): ()
 				end
 
 				if not next(queueData) then
-					self._data.crossServerData[mode][subMode] = nil
+					QueueManager.Modules.SharedData.crossServerData[mode][subMode] = nil
 				end
 			end
 
-			if next(self._data.crossServerData[mode]) == nil then
-				self._data.crossServerData[mode] = nil
+			if next(QueueManager.Modules.SharedData.crossServerData[mode]) == nil then
+				QueueManager.Modules.SharedData.crossServerData[mode] = nil
 			end
 		end
 	end
 
-	self._data.lastCacheCleanup = now
+	QueueManager.Modules.SharedData.lastCacheCleanup = now
 end
 
 --=========================
@@ -372,9 +361,9 @@ end
 
 -- Cleanup(): Cleans up queue-specific data
 function QueueManager:Cleanup(): ()
-	self._data.queueCache = {}
-	self._data.localQueueCounts = {}
-	self._data.playerQueueKeys = {}
+	QueueManager.Modules.SharedData.queueCache = {}
+	QueueManager.Modules.SharedData.localQueueCounts = {}
+	QueueManager.Modules.SharedData.playerQueueKeys = {}
 end
 
 return QueueManager :: QueueManagerT

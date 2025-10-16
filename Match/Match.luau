@@ -29,12 +29,6 @@ local HelpersPath = script.Parent.modules.helpers
 local SubModulesPath = script.Parent.modules.sub_modules
 
 --=========================
--- // TYPES
---=========================
-
-local Types = require(HelpersPath.Types)
-
---=========================
 -- // HELPERS
 --=========================
 
@@ -47,38 +41,38 @@ Match.Helpers = {
 --=========================
 
 Match.SubModules = {
+	SharedData = require(SubModulesPath.SharedData),
     QueueManager = require(SubModulesPath.QueueManager),
     CrossServerManager = require(SubModulesPath.CrossServerManager),
-    MatchmakingEngine = require(SubModulesPath.MatchmakingEngine),
-    TeleportHandler = require(SubModulesPath.TeleportHandler)
+    MatchmakingEngine = require(SubModulesPath.MatchmakingEngine)
 }
 
 --=========================
--- // DATA
+-- // PRIVATE API
 --=========================
 
-Match.Data = {
-	playerQueueKeys = {}, -- // Stores the timestamp for each player based on their UserId and their modes
-	localQueueCounts = {}, -- // Tracks the amount of players in each queue. Stops all MemoryStoreService calls if there's noone in a certain subMode's mode
-	isProcessingMatch = {}, -- // Stores booleans for each player
-	crossServerData = {}, -- // Stored data from other servers
-	matchmakingTasks = {}, -- // Stores all current loops for matchmaking
+-- CleanupInit(): Initializes cleanup hooks
+local function CleanupInit(): ()
+	Players.PlayerRemoving:Connect(function(player)
+		if player then
+			Match:StopQueue(player)
+		end
+	end)
 
-	queueCache = {}, -- // Stores Match Queue Maps
-	messagingConnections = {}, -- // All of the connections used from MessagingService
+	game:BindToClose(function()
+		Match:Cleanup()
+	end)
 
-	lastCacheCleanup = 0,
-	heartbeatConnection = nil,
-	_lockMap = nil :: MemoryStoreSortedMap? -- // Stores the 'MatchLocks' MemoryStoreSortedMap
-} :: Types.MatchData
+	local interval = Match.SubModules.QueueManager.Modules.Settings.Matches.CACHE_CLEANUP_INTERVAL or 60
+	local lastTick = tick()
 
---=========================
--- // INIT
---=========================
-
-Match.SubModules.QueueManager:Initialize(Match.Data)
-Match.SubModules.CrossServerManager:Initialize(Match.Data)
-Match.SubModules.MatchmakingEngine:Initialize(Match.Data)
+	Match.SubModules.SharedData.heartbeatConnection = RunService.Heartbeat:Connect(function()
+		if tick() - lastTick >= interval then
+			Match.SubModules.QueueManager:RunHeartbeat()
+			lastTick = tick()
+		end
+	end)
+end
 
 --=========================
 -- // MAIN API
@@ -121,13 +115,6 @@ end
 -- // MISC
 --=========================
 
--- Cleanup(): Cleans up all caches
-function Match:Cleanup()
-	Match.SubModules.CrossServerManager:Cleanup()
-	Match.SubModules.QueueManager:Cleanup()
-	Match.SubModules.MatchmakingEngine:Cleanup()
-end
-
 -- IsPlayerQueued(): Checks if a player is queued in a certain subMode's mode
 -- @param player: The player to check
 -- @param mode: The mode the player should be queued to (Match.Helpers.Settings.Modes)
@@ -166,29 +153,13 @@ end
 -- // CLEANUP
 --=========================
 
--- CleanupInit(): Initializes cleanup hooks
-function Match:CleanupInit(): ()
-	Players.PlayerRemoving:Connect(function(player)
-		if player then
-			Match:StopQueue(player)
-		end
-	end)
-
-	game:BindToClose(function()
-		Match:Cleanup()
-	end)
-
-	local interval = Match.SubModules.QueueManager.Modules.Settings.Matches.CACHE_CLEANUP_INTERVAL or 60
-	local lastTick = tick()
-
-	Match.Data.heartbeatConnection = RunService.Heartbeat:Connect(function()
-		if tick() - lastTick >= interval then
-			Match.SubModules.QueueManager:RunHeartbeat()
-			lastTick = tick()
-		end
-	end)
+-- Cleanup(): Cleans up all caches
+function Match:Cleanup()
+	Match.SubModules.CrossServerManager:Cleanup()
+	Match.SubModules.QueueManager:Cleanup()
+	Match.SubModules.MatchmakingEngine:Cleanup()
 end
 
-Match:CleanupInit()
+CleanupInit()
 
 return Match

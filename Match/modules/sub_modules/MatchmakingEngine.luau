@@ -26,22 +26,11 @@ export type MatchmakingEngineT = typeof(MatchmakingEngine) & {
 
 MatchmakingEngine.Modules = {
 	Settings = require(script.Parent.Parent.helpers.Settings),
+	SharedData = require(script.Parent.SharedData),
 	QueueManager = require(script.Parent.QueueManager),
 	CrossServerManager = require(script.Parent.CrossServerManager),
 	TeleportHandler = require(script.Parent.TeleportHandler)
 }
-
---=========================
--- // INIT
---=========================
-
--- Initialize(): Init function for this module
--- @param matchData: Types.MatchData
-function MatchmakingEngine:Initialize(matchData: Types.MatchData): ()
-	assert(matchData, "[MatchmakingEngine:Initialize]: 'matchData' is nil");
-
-	self._data = matchData
-end
 
 --=========================
 -- // HELPER API
@@ -51,11 +40,11 @@ end
 -- @param queueKey: The key of the queue
 -- @return boolean: Whether you can start matchmaking or not
 function MatchmakingEngine:CanStartMatchmaking(queueKey: Types.QueueKey): boolean
-	if not self._data.isProcessingMatch[queueKey.Mode] then
-		self._data.isProcessingMatch[queueKey.Mode] = {}
+	if not MatchmakingEngine.Modules.SharedData.isProcessingMatch[queueKey.Mode] then
+		MatchmakingEngine.Modules.SharedData.isProcessingMatch[queueKey.Mode] = {}
 	end
 
-	if self._data.isProcessingMatch[queueKey.Mode][queueKey.SubMode] then
+	if MatchmakingEngine.Modules.SharedData.isProcessingMatch[queueKey.Mode][queueKey.SubMode] then
 		return false
 	end
 
@@ -93,7 +82,7 @@ end
 -- @param queueKey: The key of the queue
 -- @return { Types.ParsedPlayerData }
 function MatchmakingEngine:CollectPlayers(queueKey: Types.QueueKey): { Types.ParsedPlayerData }
-	if not self._data.localQueueCounts[queueKey.Mode] or not self._data.localQueueCounts[queueKey.Mode][queueKey.SubMode] or self._data.localQueueCounts[queueKey.Mode][queueKey.SubMode] == 0 then
+	if not MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode] or not MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode][queueKey.SubMode] or MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode][queueKey.SubMode] == 0 then
 		return {}
 	end
 
@@ -101,7 +90,7 @@ function MatchmakingEngine:CollectPlayers(queueKey: Types.QueueKey): { Types.Par
 	local queue = MatchmakingEngine.Modules.QueueManager:GetQueue(queueKey.Mode, queueKey.SubMode)
 	local batchSize = math.clamp(MatchmakingEngine.Modules.QueueManager:GetMatchSize(queueKey.SubMode) * MatchmakingEngine.Modules.Settings.Matches.BATCH_SIZE, 1, 200)
 
-	print("Processing matchmaking: Found", self._data.localQueueCounts[queueKey.Mode][queueKey.SubMode], "total players for", queueKey.Mode, queueKey.SubMode)
+	print("Processing matchmaking: Found", MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode][queueKey.SubMode], "total players for", queueKey.Mode, queueKey.SubMode)
 
 	local success, result = pcall(function()
 		return queue:GetRangeAsync(Enum.SortDirection.Ascending, batchSize)
@@ -149,7 +138,7 @@ end
 -- @param subMode: The subMode
 -- @return { Types.ParsedPlayerData }?
 function MatchmakingEngine:FindOptimalPlayerGroup(allPlayers: { Types.ParsedPlayerData }, subMode: string): { Types.ParsedPlayerData }?
-	local matchSize = self.Modules.QueueManager:GetMatchSize(subMode)
+	local matchSize = MatchmakingEngine.Modules.QueueManager:GetMatchSize(subMode)
 
 	if #allPlayers < matchSize then return nil end
 
@@ -385,22 +374,22 @@ function MatchmakingEngine:ProcessPlayerRemoval(players: { Types.ParsedPlayerDat
 
 		local player = Players:GetPlayerByUserId(playerData.UserId)
 
-		if not player or not self._data.playerQueueKeys[playerData.UserId] then
+		if not player or not MatchmakingEngine.Modules.SharedData.playerQueueKeys[playerData.UserId] then
 			continue
 		end
 
-		if not self._data.playerQueueKeys[playerData.UserId][queueKey.Mode] then
+		if not MatchmakingEngine.Modules.SharedData.playerQueueKeys[playerData.UserId][queueKey.Mode] then
 			continue
 		end
 
-		self._data.playerQueueKeys[playerData.UserId][queueKey.Mode][queueKey.SubMode] = nil
+		MatchmakingEngine.Modules.SharedData.playerQueueKeys[playerData.UserId][queueKey.Mode][queueKey.SubMode] = nil
 
-		if next(self._data.playerQueueKeys[playerData.UserId][queueKey.Mode]) == nil then
-			self._data.playerQueueKeys[playerData.UserId][queueKey.Mode] = nil
+		if next(MatchmakingEngine.Modules.SharedData.playerQueueKeys[playerData.UserId][queueKey.Mode]) == nil then
+			MatchmakingEngine.Modules.SharedData.playerQueueKeys[playerData.UserId][queueKey.Mode] = nil
 		end
 
-		if next(self._data.playerQueueKeys[playerData.UserId]) == nil then
-			self._data.playerQueueKeys[playerData.UserId] = nil
+		if next(MatchmakingEngine.Modules.SharedData.playerQueueKeys[playerData.UserId]) == nil then
+			MatchmakingEngine.Modules.SharedData.playerQueueKeys[playerData.UserId] = nil
 		end
 	end
 
@@ -419,11 +408,11 @@ function MatchmakingEngine:UpdateLocalQueueCount(players: { Types.ParsedPlayerDa
 		end
 	end
 
-	if not self._data.localQueueCounts[queueKey.Mode] then
-		self._data.localQueueCounts[queueKey.Mode] = {}
+	if not MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode] then
+		MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode] = {}
 	end
 
-	self._data.localQueueCounts[queueKey.Mode][queueKey.SubMode] = math.max(0, (self._data.localQueueCounts[queueKey.Mode][queueKey.SubMode] or 0) - localPlayersRemoved)
+	MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode][queueKey.SubMode] = math.max(0, (MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode][queueKey.SubMode] or 0) - localPlayersRemoved)
 end
 
 --=========================
@@ -443,11 +432,11 @@ function MatchmakingEngine:MatchMake(mode: string, subMode: string): ()
 		return
 	end
 
-	if not self._data.isProcessingMatch[queueKey.Mode] then
-		self._data.isProcessingMatch[queueKey.Mode] = {}
+	if not MatchmakingEngine.Modules.SharedData.isProcessingMatch[queueKey.Mode] then
+		MatchmakingEngine.Modules.SharedData.isProcessingMatch[queueKey.Mode] = {}
 	end
 
-	self._data.isProcessingMatch[queueKey.Mode][queueKey.SubMode] = true
+	MatchmakingEngine.Modules.SharedData.isProcessingMatch[queueKey.Mode][queueKey.SubMode] = true
 
 	local function errHandler(err)
 		warn("Matchmaking error:", err, debug.traceback())
@@ -457,7 +446,7 @@ function MatchmakingEngine:MatchMake(mode: string, subMode: string): ()
 		self:ProcessMatchmaking(queueKey)
 	end, errHandler)
 
-	self._data.isProcessingMatch[queueKey.Mode][queueKey.SubMode] = false
+	MatchmakingEngine.Modules.SharedData.isProcessingMatch[queueKey.Mode][queueKey.SubMode] = false
 end
 
 -- StartMatchmaking(): Starts continuous matchmaking loops for all modes and sub-modes; Each loop calls MatchMake at intervals defined by MatchmakingEngine.Modules.Settings.Matches.CHECK_MATCHMAKING_INTERVALS
@@ -477,11 +466,11 @@ function MatchmakingEngine:CreateMatchmakingThread(mode: string, subMode: string
 		self:RunMatchmakingLoop(mode, subMode)
 	end)
 
-	if not self._data.matchmakingTasks[mode] then
-		self._data.matchmakingTasks[mode] = {}
+	if not MatchmakingEngine.Modules.SharedData.matchmakingTasks[mode] then
+		MatchmakingEngine.Modules.SharedData.matchmakingTasks[mode] = {}
 	end
 
-	self._data.matchmakingTasks[mode][subMode] = thread
+	MatchmakingEngine.Modules.SharedData.matchmakingTasks[mode][subMode] = thread
 end
 
 -- RunMatchmakingLoop(): Runs the continuous matchmaking loop for a specific mode/subMode combination
@@ -503,10 +492,10 @@ end
 
 -- StopMatchmaking(): Stops all currently running matchmaking loops that were started with StartMatchmaking; Cancels all tasks and clears the internal task table
 function MatchmakingEngine:StopMatchmaking(): ()
-	for mode, subModes in self._data.matchmakingTasks do
+	for mode, subModes in MatchmakingEngine.Modules.SharedData.matchmakingTasks do
 		for subMode, thread in subModes do
 			task.cancel(thread)
-			self._data.matchmakingTasks[mode][subMode] = nil
+			MatchmakingEngine.Modules.SharedData.matchmakingTasks[mode][subMode] = nil
 		end
 	end
 end
@@ -517,7 +506,7 @@ end
 
 -- Cleanup(): Cleans up matchmaking-specific data
 function MatchmakingEngine:Cleanup(): ()
-	self._data.isProcessingMatch = {}
+	MatchmakingEngine.Modules.SharedData.isProcessingMatch = {}
 end
 
 return MatchmakingEngine :: MatchmakingEngineT
