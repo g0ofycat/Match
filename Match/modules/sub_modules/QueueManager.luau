@@ -72,11 +72,9 @@ function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: strin
 	local players: { Player } = typeof(playerOrList) == "Instance" and { playerOrList } or playerOrList :: { Player }
 
 	for _, player in players do
-		if QueueManager.Modules.SharedData.playerQueueKeys[player.UserId]
-			and QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode]
-			and QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode][subMode] then
-			warn(player.Name .. " is already in the queue for mode:", mode, subMode)
-			continue
+		if QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] then
+			warn(player.Name .. " is already in a queue")
+			return
 		end
 
 		local playerContinent = QueueManager.Modules.PlayerLocation.GetPlayerContinent(player) :: string
