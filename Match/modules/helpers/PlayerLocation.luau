@@ -86,7 +86,9 @@ function PlayerLocation.GetPlayerContinent(player: Player): string?
 
 	if success and countryCode then
 		local continent = PlayerLocation.continentMap[string.upper(countryCode)] or "Unknown"
+
 		PlayerLocation.continentCache[player.UserId] = continent
+
 		return continent
 	else
 		print("Failed to get country code for player.")

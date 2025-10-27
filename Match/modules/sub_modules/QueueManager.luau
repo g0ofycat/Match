@@ -31,14 +31,16 @@ QueueManager.Modules = {
 
 -- generatePlayerQueueData(): Returns data based on multiple parameters
 -- @param player: The Player object to generate queue data for
--- @param ELO: The ELO of the player
+-- @param partyID: The ID of the party
 -- @param continent: The Continent of the player (Use PlayerLocation)
+-- @param ELO: The ELO of the player
 -- @return key, encoded? (JSON Encoded PlayerQueueData)
-local function generatePlayerQueueData(player: Player, ELO: number, continent: string): (string, string?)
+local function generatePlayerQueueData(player: Player, partyID: string, continent: string, ELO: number): (string, string?)
 	local timestamp = tick()
 	local key = HttpService:GenerateGUID(false)
 
 	local data: Types.PlayerQueueData = {
+        PartyID = partyID,
 		UserId = player.UserId,
 		ELO = ELO,
 		JoinTime = timestamp,
@@ -64,21 +66,24 @@ end
 -- @param playerOrList: The player(s) to queue. Put a list of players to bulk queue them or just add one player
 -- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
+-- @param isParty: If the queue is a party, parties will have all of their players teleported to the same server on matchmake (The first player in the playerOrList table will have their data used for matchmaking)
 -- @param ELO?: Optional ELO the player has
-function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, ELO: number?): ()
+function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, isParty: boolean, ELO: number?): ()
 	assert(table.find(QueueManager.Modules.Settings.Modes, mode), "'mode' doesn't exist in Settings.Modes")
 	assert(QueueManager.Modules.Settings.SubModes[subMode], "'subMode' doesn't exist in Settings.SubModes")
 
 	local players: { Player } = typeof(playerOrList) == "Instance" and { playerOrList } or playerOrList :: { Player }
 
+    local partyID = isParty and HttpService:GenerateGUID(false) or nil
+
 	for _, player in players do
 		if QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] then
 			warn(player.Name .. " is already in a queue")
-			return
+			continue
 		end
 
 		local playerContinent = QueueManager.Modules.PlayerLocation.GetPlayerContinent(player) :: string
-		local key, data = generatePlayerQueueData(player, ELO or 0, playerContinent)
+		local key, data = generatePlayerQueueData(player, partyID, playerContinent, ELO or 0)
 
 		local success, err = pcall(function()
 			self:GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)

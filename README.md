@@ -5,6 +5,7 @@ A customizable matchmaking system for Roblox games with **extremely** easy-to-us
 ## Features & Design Choices
 
 - **Queue Management (Player, Mode, Sub-Mode)**
+- **Party System**
 - **Dynamic ELO Spread Balancing with Wait-Time Expansion**
 - **Continent-Based Player Grouping**
 - **Cross-Server Match Creation via MessagingService**
@@ -15,22 +16,22 @@ A customizable matchmaking system for Roblox games with **extremely** easy-to-us
 **Example Usage:**
 
 ```lua
--- // Start matchmaking loops
+-- // Start all matchmaking loops for all modes and sub-modes
 Match:StartMatchmaking()
 
--- // Queue a player with an optional ELO parameter (Player, Mode, SubMode, ELO?)
-Match:QueuePlayer(player, "Ranked", "1v1", 1200)
+-- // Queue a single player (Player, Mode, SubMode, IsParty, ELO?)
+Match:QueuePlayer(player, "Ranked", "1v1", false, 1200)
 
--- // Bulk queue multiple players (all in the same mode/submode, optional shared ELO)
-Match:QueuePlayer({player1, player2, player3}, "Ranked", "2v2", 1300)
+-- // Bulk queue multiple players with optional shared ELO
+Match:QueuePlayer({player1, player2, player3}, "Ranked", "2v2", false, 1300)
 
--- // Stop the queue of a player
+-- // Stop a single player's queue
 Match:StopQueue(player)
 
--- // Bulk stop the queue of multiple players
+-- // Stop multiple players' queues at once
 Match:StopQueue({player1, player2, player3})
 
--- // Stop matchmaking loops
+-- // Stop all matchmaking loops
 Match:StopMatchmaking()
 ```
 
@@ -85,3 +86,17 @@ return Settings
 Most of the *Settings* are self explanitory, this section will mostly be about **Modes** and **SubModes**. You can create new modes by adding their name to **Settings.SubModes**, each mode will have all SubModes inside of them. SubModes are self explanitory, the key is the name of the SubMode and they hold a table which holds a **totalPlayers** variable which will see how many players can be in 1 match. *(e.x. 1v1 has 2 'totalPlayers' since it's a player versus a player)*. **(NOTE: Each Mode and SubMode has a seperate MemoryStoreSortedMap which would look something like: MatchQueue_Casual_1v1)**
 
 *PR's are welcome, let me know if you find any bugs or changes that this project can use!*
+
+**Party System (EXPERIMENTAL):**
+
+The built-in party system can be used using **Match:QueuePlayer()**
+
+```lua
+Match:QueuePlayer({player1, player2, player3}, "Ranked", "2v2", true, 1300)
+```
+
+Using **Bulk queueing** and the **IsParty** parameter *(the 'true' boolean)*, this allows each queued player to be part of a party. This allows each player to get matched in the same server. The first player in the list (player1), will have their data used for the matchmaking (e.x. Continent, ELO). Parties should usually have the base starting ELO of your game.
+
+**(NOTE: Parties can be matched against normal players)**
+
+**(NOTE: There is no "party leader"; So there's no auto-dequeueing when the "leader" leaves. Will most likely be changed later)**

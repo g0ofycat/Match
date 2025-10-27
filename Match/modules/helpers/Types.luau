@@ -10,6 +10,7 @@ export type QueueKey = {
 }
 
 export type PlayerQueueData = {
+    PartyID: string?,
 	UserId: number,
 	ELO: number,
 	JoinTime: number,
@@ -28,6 +29,7 @@ export type QueueStatusResponseData = {
 }
 
 export type ParsedPlayerData = {
+    PartyID: string?,
 	UserId: number,
 	ELO: number,
 	JoinTime: number,
@@ -59,6 +61,7 @@ export type TeleportRequestData = {
     ServerCode: string,
     PlaceId: number,
     PlayersForServer: { [string]: { number } },
+    PartyMapping: { [string]: { [number]: string? } },
     Mode: string,
     SubMode: string,
     Timestamp: number

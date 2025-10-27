@@ -61,7 +61,7 @@ function TeleportHandler:HandleTeleportRequest(data: Types.TeleportRequestData):
 				data.ServerCode,
 				playersToTeleport,
 				nil,
-				{ MatchId = data.MatchId, Mode = data.Mode, SubMode = data.SubMode }
+				{ MatchId = data.MatchId, Mode = data.Mode, SubMode = data.SubMode, Parties = data.PartyMapping[serverId] }
 			)
 		end)
 
