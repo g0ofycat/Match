@@ -11,11 +11,12 @@ export type QueueKey = {
 
 export type PlayerQueueData = {
     PartyID: string?,
+    IsPartyLeader: boolean,
 	UserId: number,
 	ELO: number,
 	JoinTime: number,
 	ServerId: string,
-	Continent: string
+	Continent: string,
 }
 
 export type QueueStatusResponseData = {
@@ -30,13 +31,14 @@ export type QueueStatusResponseData = {
 
 export type ParsedPlayerData = {
     PartyID: string?,
+    IsPartyLeader: boolean,
 	UserId: number,
 	ELO: number,
 	JoinTime: number,
 	QueueKey: QueueKey,
 	MemoryStoreKey: string,
 	ServerId: string,
-	Continent: string
+	Continent: string,
 }
 
 export type QueueCacheEntry = {
@@ -56,19 +58,29 @@ export type CrossServerData = {
 	Timestamp: number
 }
 
+export type PartyMap = {
+    [string]: {
+        [string?]:
+        {
+            Members: { number },
+            Leader: number?
+        }
+    }
+}
+
 export type TeleportRequestData = {
     MatchId: string,
     ServerCode: string,
     PlaceId: number,
     PlayersForServer: { [string]: { number } },
-    PartyMapping: { [string]: { [number]: string? } },
+    PartyMapping: PartyMap,
     Mode: string,
     SubMode: string,
     Timestamp: number
 }
 
 export type MatchData = {
-	playerQueueKeys: { [number]: { [string]: { [string]: string } } }, -- // UserId -> Mode -> SubMode -> MemoryStoreKey (string)
+	playerQueueKeys: { [number]: { [string]: { [string]: string } } }, -- // UserId -> Mode -> SubMode -> MemoryStoreKey
 	localQueueCounts: { [string]: { [string]: number } }, -- // Mode -> SubMode -> Count
 	isProcessingMatch: { [string]: { [string]: boolean } }, -- // Mode -> SubMode -> Processing Status
 

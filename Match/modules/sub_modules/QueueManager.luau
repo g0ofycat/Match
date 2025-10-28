@@ -22,7 +22,7 @@ local Types = require(script.Parent.Parent.helpers.Types)
 QueueManager.Modules = {
 	Settings = require(script.Parent.Parent.helpers.Settings),
 	SharedData = require(script.Parent.SharedData),
-	PlayerLocation = require(script.Parent.Parent.helpers.PlayerLocation),
+	PlayerLocation = require(script.Parent.Parent.helpers.PlayerLocation)
 }
 
 --=========================
@@ -31,16 +31,18 @@ QueueManager.Modules = {
 
 -- generatePlayerQueueData(): Returns data based on multiple parameters
 -- @param player: The Player object to generate queue data for
--- @param partyID: The ID of the party
+-- @param partyID?: The ID of the party, if any
+-- @param isLeader: If the player is the leader of their party
 -- @param continent: The Continent of the player (Use PlayerLocation)
 -- @param ELO: The ELO of the player
 -- @return key, encoded? (JSON Encoded PlayerQueueData)
-local function generatePlayerQueueData(player: Player, partyID: string, continent: string, ELO: number): (string, string?)
+local function generatePlayerQueueData(player: Player, partyID: string?, isLeader: boolean, continent: string, ELO: number): (string, string?)
 	local timestamp = tick()
 	local key = HttpService:GenerateGUID(false)
 
 	local data: Types.PlayerQueueData = {
         PartyID = partyID,
+        IsPartyLeader = isLeader,
 		UserId = player.UserId,
 		ELO = ELO,
 		JoinTime = timestamp,
@@ -62,28 +64,31 @@ end
 -- // PUBLIC API
 --=========================
 
--- QueuePlayer(): Queues the player(s) up into the matchmaking
+-- QueuePlayer(): Queues the player(s) up into matchmaking
 -- @param playerOrList: The player(s) to queue. Put a list of players to bulk queue them or just add one player
 -- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
--- @param isParty: If the queue is a party, parties will have all of their players teleported to the same server on matchmake (The first player in the playerOrList table will have their data used for matchmaking)
 -- @param ELO?: Optional ELO the player has
-function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, isParty: boolean, ELO: number?): ()
+function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, ELO: number?): ()
 	assert(table.find(QueueManager.Modules.Settings.Modes, mode), "'mode' doesn't exist in Settings.Modes")
 	assert(QueueManager.Modules.Settings.SubModes[subMode], "'subMode' doesn't exist in Settings.SubModes")
 
 	local players: { Player } = typeof(playerOrList) == "Instance" and { playerOrList } or playerOrList :: { Player }
 
-    local partyID = isParty and HttpService:GenerateGUID(false) or nil
-
 	for _, player in players do
 		if QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] then
 			warn(player.Name .. " is already in a queue")
-			continue
+			return
 		end
 
-		local playerContinent = QueueManager.Modules.PlayerLocation.GetPlayerContinent(player) :: string
-		local key, data = generatePlayerQueueData(player, partyID, playerContinent, ELO or 0)
+		local playerContinent = QueueManager.Modules.PlayerLocation.GetPlayerContinent(player)
+
+        if not playerContinent then
+            warn(`QueuePlayer(): Couldn't find {player}'s continent, skipping`)
+            continue
+        end
+
+		local key, data = generatePlayerQueueData(player, nil, false, playerContinent, ELO or 0)
 
 		local success, err = pcall(function()
 			self:GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
@@ -102,8 +107,51 @@ function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: strin
 			print("Queued player", player.Name, "for", mode, subMode, "mode. Region:", playerContinent)
 		else
 			warn("Failed to queue player:", err)
+            continue
 		end
 	end
+end
+
+-- QueueParty(): Queues a party into matchmaking
+-- @param leaderPlayer: The player who created the party
+-- @param partyMembers: The party members
+-- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
+-- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
+-- @param ELO?: Optional ELO the player has
+function QueueManager:QueueParty(leaderPlayer: Player, partyMembers: { Player }, mode: string, subMode: string, ELO: number?): ()
+	assert(#partyMembers > 0, "QueueParty(): Party must have at least one member")
+
+	local partyID = HttpService:GenerateGUID(false)
+	local leaderContinent = QueueManager.Modules.PlayerLocation.GetPlayerContinent(leaderPlayer)
+
+	for _, player in { leaderPlayer, table.unpack(partyMembers) } do
+        local isLeader = player == leaderPlayer
+
+        if not leaderContinent then
+            warn(`QueuePlayer(): Couldn't find {leaderPlayer}'s continent, skipping`)
+            continue
+        end
+
+        local key, data = generatePlayerQueueData(player, partyID, isLeader, leaderContinent, ELO or 0)
+
+        local success, err = pcall(function()
+            self:GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
+        end)
+
+        if success then
+            QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] or {}
+            QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode] = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode] or {}
+            QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode][subMode] = key
+
+            QueueManager.Modules.SharedData.localQueueCounts[mode] = QueueManager.Modules.SharedData.localQueueCounts[mode] or {}
+            QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] = (QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] or 0) + 1
+        else
+            warn("Failed to queue party member:", err)
+            continue
+        end
+    end
+
+	print(("Queued party led by %s with %d members for %s / %s"):format(leaderPlayer.Name, #partyMembers, mode, subMode))
 end
 
 -- StopQueue(): Removes the player(s) from all queues across every mode and subMode

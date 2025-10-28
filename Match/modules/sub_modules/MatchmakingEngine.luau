@@ -107,10 +107,10 @@ function MatchmakingEngine:CollectPlayers(queueKey: Types.QueueKey): { Types.Par
 end
 
 -- ParseQueueEntry(): Returns the JSON decoded entry safely
--- @param entry: The entry (MemoryStore Key & JSON Encoded PlayerQueueData)
+-- @param entry: The entry
 -- @param queueKey: Types.QueueKey
 -- @return Types.ParsedPlayerData
-function MatchmakingEngine:ParseQueueEntry(entry: any, queueKey: Types.QueueKey): Types.ParsedPlayerData
+function MatchmakingEngine:ParseQueueEntry(entry: { key: string, value: Types.PlayerQueueData }, queueKey: Types.QueueKey): Types.ParsedPlayerData
 	local success, data = pcall(HttpService.JSONDecode, HttpService, entry.value)
 
 	if not success or not data or not data.UserId or not data.ELO then
@@ -119,6 +119,7 @@ function MatchmakingEngine:ParseQueueEntry(entry: any, queueKey: Types.QueueKey)
 
 	return {
         PartyID = data.PartyID,
+        IsPartyLeader = data.IsPartyLeader,
 		UserId = data.UserId,
 		ELO = data.ELO,
 		JoinTime = data.JoinTime,
@@ -269,10 +270,10 @@ end
 -- ProcessPlayerRemoval(): Removes players from queue and organizes them by server WITH party info
 -- @param players: { Types.ParsedPlayerData }
 -- @param queueKey: Types.QueueKey
--- @return ({ [string]: { number } }, { [string]: { [number]: string? } }, number): Players by server, party mapping, removal failures
-function MatchmakingEngine:ProcessPlayerRemoval(players: { Types.ParsedPlayerData }, queueKey: Types.QueueKey): ({ [string]: { number } }, { [string]: { [number]: string? } }, number)
+-- @return ({ [string]: { number } }, Types.PartyMap, number): Players by server, party mapping, removal failures
+function MatchmakingEngine:ProcessPlayerRemoval(players: { Types.ParsedPlayerData }, queueKey: Types.QueueKey): ({ [string]: { number } }, Types.PartyMap, number)
 	local playersByServer = {}
-    local partyMapping = {}
+    local partyMapping: Types.PartyMap = {}
 	local removalFailures = 0
 	local queue = MatchmakingEngine.Modules.QueueManager:GetQueue(queueKey.Mode, queueKey.SubMode)
 
@@ -288,15 +289,21 @@ function MatchmakingEngine:ProcessPlayerRemoval(players: { Types.ParsedPlayerDat
 		end
 
 		local serverId = playerData.ServerId
+        local partyId = playerData.PartyID
 
 		playersByServer[serverId] = playersByServer[serverId] or {}
-
 		table.insert(playersByServer[serverId], playerData.UserId)
 
-        if playerData.PartyID then
+		if partyId then
             partyMapping[serverId] = partyMapping[serverId] or {}
-			partyMapping[serverId][playerData.UserId] = playerData.PartyID
-		end
+            partyMapping[serverId][partyId] = partyMapping[serverId][partyId] or { Members = {}, Leader = nil }
+
+            table.insert(partyMapping[serverId][partyId].Members, playerData.UserId)
+
+            if playerData.IsPartyLeader and partyMapping[serverId][partyId] then
+                partyMapping[serverId][partyId].Leader = playerData.UserId
+            end
+        end
 
 		if serverId ~= MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
 			continue
@@ -346,7 +353,7 @@ function MatchmakingEngine:UpdateLocalQueueCount(players: { Types.ParsedPlayerDa
 end
 
 --=========================
--- // PARTY API
+-- // UNIT API
 --=========================
 
 -- CreateMatchmakingUnits(): Groups players into units (parties stay together)
@@ -390,22 +397,26 @@ function MatchmakingEngine:FormMatchFromUnits(units: { { Types.ParsedPlayerData 
 	local currentMatch = {}
 
 	for _, unit in units do
-		if #currentMatch + #unit <= matchSize then
-			for _, player in unit do
-				table.insert(currentMatch, player)
-			end
+        if #currentMatch + #unit > matchSize then
+            continue
+        end
 
-			if #currentMatch == matchSize then
-				if self:IsMatchValid(currentMatch) then
-					return currentMatch
-				else
-					for _ = 1, #unit do
-						table.remove(currentMatch)
-					end
-				end
-			end
-		end
-	end
+        for _, player in unit do
+            table.insert(currentMatch, player)
+        end
+
+        if #currentMatch ~= matchSize then
+            continue
+        end
+
+        if self:IsMatchValid(currentMatch) then
+            return currentMatch
+        end
+
+        for _ = 1, #unit do
+            table.remove(currentMatch)
+        end
+    end
 
 	return nil
 end
@@ -417,8 +428,21 @@ function MatchmakingEngine:GroupUnitsByContinent(units: { { Types.ParsedPlayerDa
 	local groups = {}
 
 	for _, unit in units do
-		local continent = unit[1].Continent
+		local leaderIndex = nil
+
+		for i, player in unit do
+			if player.IsPartyLeader then
+				leaderIndex = i
+				break
+			end
+		end
+
+		local leader = leaderIndex and unit[leaderIndex] or unit[1]
+
+		local continent = leader.Continent
+
 		groups[continent] = groups[continent] or {}
+
 		table.insert(groups[continent], unit)
 	end
 

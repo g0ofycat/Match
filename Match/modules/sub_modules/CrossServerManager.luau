@@ -98,10 +98,10 @@ end
 -- NotifyServersOfMatch(): Notifies all servers about the new match
 -- @param code: Reserved server code
 -- @param playersByServer: Players organized by server ID
--- @param partyMapping: Party information for each player { [serverId]: { [userId]: partyId } }
+-- @param partyMapping: Party information for each player
 -- @param queueKey: The key of the queue
 -- @return boolean: True on success, false on failure
-function CrossServerManager:NotifyServersOfMatch(code: string, playersByServer: { [string]: { number } }, partyMapping: { [string]: { [number]: string? } }, queueKey: Types.QueueKey): boolean
+function CrossServerManager:NotifyServersOfMatch(code: string, playersByServer: { [string]: { number } }, partyMapping: Types.PartyMap, queueKey: Types.QueueKey): boolean
 	local success, err = pcall(function()
 		MessagingService:PublishAsync("CrossServerTeleport", {
 			MatchId = CrossServerManager.Modules.Settings.Information.SERVER_ID,

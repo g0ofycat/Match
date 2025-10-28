@@ -44,7 +44,8 @@ Match.SubModules = {
 	SharedData = require(SubModulesPath.SharedData),
     QueueManager = require(SubModulesPath.QueueManager),
     CrossServerManager = require(SubModulesPath.CrossServerManager),
-    MatchmakingEngine = require(SubModulesPath.MatchmakingEngine)
+    MatchmakingEngine = require(SubModulesPath.MatchmakingEngine),
+    PartyManager = require(SubModulesPath.PartyManager)
 }
 
 --=========================
@@ -78,14 +79,13 @@ end
 -- // MAIN API
 --=========================
 
--- QueuePlayer(): Queues the player(s) up into the matchmaking
+-- QueuePlayer(): Queues the player(s) up into matchmaking
 -- @param playerOrList: The player(s) to queue. Put a list of players to bulk queue them or just add one player
 -- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
--- @param isParty: If the queue is a party, parties will have all of their players teleported to the same server on matchmake (The first player in the playerOrList table will have their data used for matchmaking)
 -- @param ELO?: Optional ELO the player has
-function Match:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, isParty: boolean, ELO: number?): ()
-	Match.SubModules.QueueManager:QueuePlayer(playerOrList, mode, subMode, isParty, ELO)
+function Match:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, ELO: number?): ()
+	Match.SubModules.QueueManager:QueuePlayer(playerOrList, mode, subMode, ELO)
 end
 
 -- StopQueue(): Removes the player(s) from all queues across every mode and subMode
