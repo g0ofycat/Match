@@ -87,7 +87,7 @@ Most of the *Settings* are self explanitory, this section will mostly be about *
 
 *PR's are welcome, let me know if you find any bugs or changes that this project can use!*
 
-**Party System (EXPERIMENTAL):**
+# **Party System (EXPERIMENTAL):**
 
 The built-in party system can be used using **Match:QueuePlayer()**
 
@@ -100,3 +100,25 @@ Using **Bulk queueing** and the **IsParty** parameter *(the 'true' boolean)*, th
 **(NOTE: Parties can be matched against normal players)**
 
 **(NOTE: There is no "party leader"; So there's no auto-dequeueing when the "leader" leaves. Will most likely be changed later)**
+
+# **Recieving data:**
+
+The following data is sent when players are teleported:
+
+```lua
+{ MatchId = data.MatchId, Mode = data.Mode, SubMode = data.SubMode, Parties = data.PartyMapping[serverId] }
+```
+
+The others are self explanitory. Although to set up teams for partied players, you can just check the Parties table.
+
+**Table Format - [UserID]: Party ID**
+
+Example:
+
+```lua
+Parties = {
+    [1234567890] = "ID_GENERATED_BY_GUID",
+    [0987654321] = "ID_GENERATED_BY_GUID",
+    ...
+}
+```
