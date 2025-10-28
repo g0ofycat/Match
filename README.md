@@ -129,13 +129,10 @@ The others are self explanitory. Although to set up teams for partied players, y
 **Table Format:**
 
 ```lua
-export type PartyMap = {
-    [string]: {
-        [string?]:
-        {
-            Members: { number },
-            Leader: number?
-        }
+export type Parties = {
+    [string?]: {
+        Members: { number },
+        Leader: number?
     }
 }
 ```

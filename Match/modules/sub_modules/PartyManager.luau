@@ -198,23 +198,21 @@ end
 -- CreateTeamsFromPartyMap(): Automatically creates parties from a PartyMap
 -- @param partyMap: Types.PartyMap
 function PartyManager.CreateTeamsFromPartyMap(partyMap: Types.PartyMap): ()
-	for _, serverParties in partyMap do
-		for _, partyData in serverParties do
-			local leaderPlayer = PartyManager.PlayerLookup[partyData.Leader]
-			if not leaderPlayer then continue end
+		for _, partyData in partyMap do
+            local leaderPlayer = PartyManager.PlayerLookup[partyData.Leader]
+            if not leaderPlayer then continue end
 
-			local members = {}
+            local members = {}
 
-			for _, userId in partyData.Members do
-				local player = PartyManager.PlayerLookup[userId]
+            for _, userId in partyData.Members do
+                local player = PartyManager.PlayerLookup[userId]
 
-				if player and player ~= leaderPlayer then
-					table.insert(members, player)
-				end
-			end
+                if player and player ~= leaderPlayer then
+                    table.insert(members, player)
+                end
+            end
 
-			PartyManager.CreateParty(leaderPlayer, members)
-		end
+            PartyManager.CreateParty(leaderPlayer, members)
 	end
 end
 
