@@ -116,7 +116,7 @@ Match.Modules.PartyManager.StopParty(game.Players.LeaderPlayer)
 Match.Modules.PartyManager.DeleteParty(game.Players.LeaderPlayer)
 ```
 
-# **Receiving data:**
+# **Receiving data**
 
 The following data is sent when players are teleported:
 
