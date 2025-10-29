@@ -117,41 +117,68 @@ end
 -- @param partyMembers: The party members
 -- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
+-- @param partyID: The party ID from PartyManager
 -- @param ELO?: Optional ELO the player has
-function QueueManager:QueueParty(leaderPlayer: Player, partyMembers: { Player }, mode: string, subMode: string, ELO: number?): ()
+function QueueManager:QueueParty(leaderPlayer: Player, partyMembers: { Player }, mode: string, subMode: string, partyID: string, ELO: number?): ()
 	assert(#partyMembers > 0, "QueueParty(): Party must have at least one member")
+	assert(partyID, "QueueParty(): partyID is required")
 
-	local partyID = HttpService:GenerateGUID(false)
 	local leaderContinent = QueueManager.Modules.PlayerLocation.GetPlayerContinent(leaderPlayer)
 
+	if not leaderContinent then
+		warn(`QueueParty(): Couldn't find {leaderPlayer.Name}'s continent, aborting`)
+		return
+	end
+
+	local queuedPlayers = {}
+	local failedPlayers = {}
+
 	for _, player in { leaderPlayer, table.unpack(partyMembers) } do
-        local isLeader = player == leaderPlayer
+		local isLeader = player == leaderPlayer
 
-        if not leaderContinent then
-            warn(`QueuePlayer(): Couldn't find {leaderPlayer}'s continent, skipping`)
-            continue
-        end
+		local key, data = generatePlayerQueueData(player, partyID, isLeader, leaderContinent, ELO or 0)
 
-        local key, data = generatePlayerQueueData(player, partyID, isLeader, leaderContinent, ELO or 0)
+		if not data then
+			warn(`QueueParty(): Failed to generate data for {player.Name}`)
+			table.insert(failedPlayers, player)
+			continue
+		end
 
-        local success, err = pcall(function()
-            self:GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
-        end)
+		local success, err = pcall(function()
+			self:GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
+		end)
 
-        if success then
-            QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] or {}
-            QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode] = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode] or {}
-            QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode][subMode] = key
+		if success then
+			QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] or {}
+			QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode] = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode] or {}
+			QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode][subMode] = key
 
-            QueueManager.Modules.SharedData.localQueueCounts[mode] = QueueManager.Modules.SharedData.localQueueCounts[mode] or {}
-            QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] = (QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] or 0) + 1
-        else
-            warn("Failed to queue party member:", err)
-            continue
-        end
-    end
+			QueueManager.Modules.SharedData.localQueueCounts[mode] = QueueManager.Modules.SharedData.localQueueCounts[mode] or {}
+			QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] = (QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] or 0) + 1
 
-	print(("Queued party led by %s with %d members for %s / %s"):format(leaderPlayer.Name, #partyMembers, mode, subMode))
+			table.insert(queuedPlayers, player)
+		else
+			warn(`QueueParty(): Failed to queue {player.Name}: {err}`)
+			table.insert(failedPlayers, player)
+		end
+	end
+
+	if #failedPlayers > 0 then
+		warn(`QueueParty(): {#failedPlayers} players failed to queue, rolling back party`)
+
+		for _, player in queuedPlayers do
+			self:StopQueue(player)
+		end
+
+		return
+	end
+
+	print((`Queued party led by %s with %d members for %s / %s`):format(
+		leaderPlayer.Name,
+		#partyMembers,
+		mode,
+		subMode
+	))
 end
 
 -- StopQueue(): Removes the player(s) from all queues across every mode and subMode

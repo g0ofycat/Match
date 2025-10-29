@@ -130,26 +130,50 @@ function MatchmakingEngine:ParseQueueEntry(entry: { key: string, value: Types.Pl
 	}
 end
 
--- FindOptimalPlayerGroup(): Finds the optimal group for the player
+-- FindOptimalPlayerGroup(): Main entry point for match formation
 -- @param allPlayers: { Types.ParsedPlayerData }
--- @param subMode: The subMode
+-- @param subMode: string
 -- @return { Types.ParsedPlayerData }?
 function MatchmakingEngine:FindOptimalPlayerGroup(allPlayers: { Types.ParsedPlayerData }, subMode: string): { Types.ParsedPlayerData }?
 	local matchSize = MatchmakingEngine.Modules.QueueManager:GetMatchSize(subMode)
 
-	if #allPlayers < matchSize then return nil end
-
-	local matchmakingUnits = self:CreateMatchmakingUnits(allPlayers)
-
-	local continentGroups = self:GroupUnitsByContinent(matchmakingUnits)
-
-	for _, units in continentGroups do
-		local match = self:FormMatchFromUnits(units, matchSize)
-
-		if match then return match end
+	if #allPlayers < matchSize then
+		return nil
 	end
 
-	return self:FormMatchFromUnits(matchmakingUnits, matchSize)
+	local units = self:CreateMatchmakingUnits(allPlayers)
+
+	local continentGroups = self:GroupUnitsByContinent(units)
+
+	local sortedContinents = {}
+
+	for continent, continentUnits in continentGroups do
+		local totalPlayers = 0
+		for _, unit in continentUnits do
+			totalPlayers += #unit
+		end
+
+		if totalPlayers >= matchSize then
+			table.insert(sortedContinents, {
+				continent = continent,
+				units = continentUnits,
+				playerCount = totalPlayers
+			})
+		end
+	end
+
+	table.sort(sortedContinents, function(a, b)
+		return a.playerCount > b.playerCount
+	end)
+
+	for _, group in sortedContinents do
+		local match = self:FormMatchFromUnits(group.units, matchSize)
+		if match then 
+			return match 
+		end
+	end
+
+	return self:FormMatchFromUnits(units, matchSize)
 end
 
 -- IsGroupValid(): Validates whether a matchmaking group meets ELO spread requirements for all players each player has a dynamic allowed spread based on their queue wait time
@@ -356,17 +380,22 @@ end
 -- // UNIT API
 --=========================
 
--- CreateMatchmakingUnits(): Groups players into units (parties stay together)
+-- CreateMatchmakingUnits(): Groups players into units with validation
 -- @param players: { Types.ParsedPlayerData }
 -- @return { { Types.ParsedPlayerData } }
 function MatchmakingEngine:CreateMatchmakingUnits(players: { Types.ParsedPlayerData }): { { Types.ParsedPlayerData } }
 	local parties: { [string]: { Types.ParsedPlayerData } } = {}
+	local partyLeaders: { [string]: boolean } = {}
 	local solos = {}
 
 	for _, player in players do
 		if player.PartyID then
 			parties[player.PartyID] = parties[player.PartyID] or {}
 			table.insert(parties[player.PartyID], player)
+
+			if player.IsPartyLeader then
+				partyLeaders[player.PartyID] = true
+			end
 		else
 			table.insert(solos, { player })
 		end
@@ -374,8 +403,15 @@ function MatchmakingEngine:CreateMatchmakingUnits(players: { Types.ParsedPlayerD
 
 	local units = {}
 
-	for _, party in parties do
-		table.insert(units, party)
+	for partyId, party in parties do
+		if not partyLeaders[partyId] then
+			warn(`Party {partyId} missing leader, splitting into solos`)
+			for _, player in party do
+				table.insert(units, { player })
+			end
+		else
+			table.insert(units, party)
+		end
 	end
 
 	for _, solo in solos do
@@ -390,59 +426,123 @@ end
 -- @param matchSize: number
 -- @return { Types.ParsedPlayerData }?
 function MatchmakingEngine:FormMatchFromUnits(units: { { Types.ParsedPlayerData } }, matchSize: number): { Types.ParsedPlayerData }?
-	table.sort(units, function(a, b)
+	if #units == 0 then return nil end
+
+	local maxPartySize = math.floor(matchSize / 2)
+	local validUnits = {}
+
+	for _, unit in units do
+		if #unit <= maxPartySize then
+			table.insert(validUnits, unit)
+		end
+	end
+
+	if #validUnits == 0 then return nil end
+
+	table.sort(validUnits, function(a, b)
 		return self:GetAverageJoinTime(a) < self:GetAverageJoinTime(b) :: number
 	end)
 
-	local currentMatch = {}
+	for startIdx = 1, #validUnits do
+		local match = self:BuildMatchFromSeed(validUnits, startIdx, matchSize)
 
-	for _, unit in units do
-        if #currentMatch + #unit > matchSize then
-            continue
-        end
+		if match then
+			return match
+		end
+	end
 
-        for _, player in unit do
-            table.insert(currentMatch, player)
-        end
-
-        if #currentMatch ~= matchSize then
-            continue
-        end
-
-        if self:IsMatchValid(currentMatch) then
-            return currentMatch
-        end
-
-        for _ = 1, #unit do
-            table.remove(currentMatch)
-        end
-    end
+    warn(`No valid match formed from {#validUnits} units for {matchSize}-player match`)
 
 	return nil
 end
 
--- GroupUnitsByContinent(): Group all units by their continent
--- @param units: The units to group
+-- BuildMatchFromSeed(): Build a match starting from a seed unit
+-- @param units: { { Types.ParsedPlayerData } }
+-- @param seedIdx: Index of the seed unit
+-- @param matchSize: number
+-- @return { Types.ParsedPlayerData }?
+function MatchmakingEngine:BuildMatchFromSeed(units: { { Types.ParsedPlayerData } }, seedIdx: number, matchSize: number): { Types.ParsedPlayerData }?
+	local seedUnit = units[seedIdx]
+	local currentMatch = {}
+	local currentTime = tick()
+
+	for _, player in seedUnit do
+		table.insert(currentMatch, player)
+	end
+
+	local oldestJoinTime = math.huge
+
+	for _, player in seedUnit do
+		oldestJoinTime = math.min(oldestJoinTime, player.JoinTime or currentTime)
+	end
+
+	local seedWaitTime = currentTime - oldestJoinTime
+    local allowedSpread = self:GetMaxSpreadForWaitTime(seedWaitTime) :: number
+
+	local seedELO = self:GetAverageELO(seedUnit)
+
+	local candidates = {}
+
+	for i, unit in units do
+		if i == seedIdx then continue end
+
+		local avgELO = self:GetAverageELO(unit) :: number
+		local eloDiff = math.abs(avgELO - seedELO)
+
+		if eloDiff <= allowedSpread * 2 then
+			table.insert(candidates, {
+				unit = unit,
+				index = i,
+				eloDiff = eloDiff,
+				size = #unit
+			})
+		end
+	end
+
+	table.sort(candidates, function(a, b)
+		return a.eloDiff < b.eloDiff
+	end)
+
+	for _, candidate in candidates do
+		if #currentMatch + candidate.size > matchSize then
+			continue
+		end
+
+		for _, player in candidate.unit do
+			table.insert(currentMatch, player)
+		end
+
+		if #currentMatch == matchSize then
+			if self:IsMatchValid(currentMatch) then
+				return currentMatch
+			else
+				return nil
+			end
+		end
+	end
+
+	return nil
+end
+
+-- GroupUnitsByContinent(): Group units by continent
+-- @param units: { { Types.ParsedPlayerData } }
 -- @return { [string]: { { Types.ParsedPlayerData } } }
 function MatchmakingEngine:GroupUnitsByContinent(units: { { Types.ParsedPlayerData } }): { [string]: { { Types.ParsedPlayerData } } }
 	local groups = {}
 
 	for _, unit in units do
-		local leaderIndex = nil
+		local continent = nil
 
-		for i, player in unit do
+		for _, player in unit do
 			if player.IsPartyLeader then
-				leaderIndex = i
+				continent = player.Continent
 				break
 			end
 		end
 
-		local leader = leaderIndex and unit[leaderIndex] or unit[1]
-
-		local continent = leader.Continent
+		continent = continent or unit[1].Continent or "Unknown"
 
 		groups[continent] = groups[continent] or {}
-
 		table.insert(groups[continent], unit)
 	end
 
@@ -451,7 +551,7 @@ end
 
 -- GetAverageJoinTime(): Gets average join time for a unit
 -- @param unit: { Types.ParsedPlayerData }
--- @return number: The average join time
+-- @return number
 function MatchmakingEngine:GetAverageJoinTime(unit: { Types.ParsedPlayerData }): number
 	local sum = 0
 
@@ -462,17 +562,41 @@ function MatchmakingEngine:GetAverageJoinTime(unit: { Types.ParsedPlayerData }):
 	return sum / #unit
 end
 
--- IsMatchValid(): Validates the entire match (ELO spread, etc.)
+-- GetAverageELO(): Get the average ELO on a unit
+-- @param unit: { Types.ParsedPlayerData }
+-- @return number
+function MatchmakingEngine:GetAverageELO(unit: { Types.ParsedPlayerData }): number
+	local sum = 0
+
+	for _, player in unit do
+		sum += player.ELO or 1000
+	end
+
+	return sum / #unit
+end
+
+-- GetMaxSpreadForWaitTime(): Calculate max allowed ELO spread based on wait time
+-- @param waitTime: Seconds waited
+-- @return number
+function MatchmakingEngine:GetMaxSpreadForWaitTime(waitTime: number): number
+	local baseSpread = MatchmakingEngine.Modules.Settings.Matches.ELO_CHANGE or 200
+	local increaseRate = MatchmakingEngine.Modules.Settings.Matches.ELO_INCREASE_RATE or 5
+
+	return baseSpread + (waitTime * increaseRate)
+end
+
+-- IsMatchValid(): Validate complete match
 -- @param players: { Types.ParsedPlayerData }
--- @return boolean: True if valid, false otherwise
+-- @return boolean
 function MatchmakingEngine:IsMatchValid(players: { Types.ParsedPlayerData }): boolean
 	table.sort(players, function(a, b) return a.ELO < b.ELO end)
 
 	local minELO = players[1].ELO
 	local maxELO = players[#players].ELO
 	local actualSpread = maxELO - minELO
+	local currentTime = tick()
 
-	return self:IsGroupValid(players, actualSpread, tick())
+	return self:IsGroupValid(players, actualSpread, currentTime)
 end
 
 --=========================

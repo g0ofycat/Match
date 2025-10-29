@@ -8,17 +8,14 @@ local PartyManager = {}
 
 local Players = game:GetService("Players")
 
---=========================
--- // TYPES
---=========================
-
-local Types = require(script.Parent.Parent.helpers.Types)
+local HttpService = game:GetService("HttpService")
 
 --=========================
 -- // MODULES
 --=========================
 
 PartyManager.Modules = {
+    Settings = require(script.Parent.Parent.helpers.Settings),
 	QueueManager = require(script.Parent.QueueManager)
 }
 
@@ -36,6 +33,10 @@ PartyManager.PlayerLookup = {}
 
 -- SetupPlayerLookup(): Maintains a lookup table of UserId -> Player
 local function SetupPlayerLookup(): ()
+    for _, player in Players:GetPlayers() do
+        PartyManager.PlayerLookup[player.UserId] = player
+    end
+
     Players.PlayerAdded:Connect(function(player)
         PartyManager.PlayerLookup[player.UserId] = player
     end)
@@ -45,12 +46,33 @@ local function SetupPlayerLookup(): ()
     end)
 end
 
--- CleanupInit(): Handle players leaving if they're a party leader
+-- CleanupInit(): Handle players leaving if they're in a party
 local function CleanupInit(): ()
     Players.PlayerRemoving:Connect(function(player)
-        if not PartyManager.Parties[player] then return end
+        if PartyManager.Parties[player] then
+            local party = PartyManager.Parties[player]
 
-        PartyManager.DeleteParty(player)
+            local isInMatch = false
+
+            for _, member in { player, table.unpack(party.Members) } do
+                if PartyManager.Modules.QueueManager:IsPlayerQueued(member) then
+                    isInMatch = true
+                    break
+                end
+            end
+
+            if not isInMatch then
+                PartyManager.DeleteParty(player)
+            end
+
+            return
+        end
+
+        local leader = PartyManager.GetLeader(player)
+
+        if leader then
+            PartyManager.RemovePlayer(leader, player)
+        end
     end)
 end
 
@@ -58,11 +80,24 @@ end
 -- // PUBLIC API
 --=========================
 
--- CreateParty(): Creates a party
+-- CreateParty(): Creates a party with a unique ID
 -- @param LeaderPlayer: The player who created the party
 -- @param Members: The members of the party
-function PartyManager.CreateParty(LeaderPlayer: Player, Members: { Player }): ()
-    PartyManager.Parties[LeaderPlayer] = Members
+-- @return string: PartyID
+function PartyManager.CreateParty(LeaderPlayer: Player, Members: { Player }): string
+    if PartyManager.Parties[LeaderPlayer] then
+        warn("CreateParty(): Leader already has a party")
+        return ""
+    end
+
+    local partyId = HttpService:GenerateGUID(false)
+
+    PartyManager.Parties[LeaderPlayer] = {
+        PartyID = partyId,
+        Members = Members
+    }
+
+    return partyId
 end
 
 -- QueueParty(): Queues all members of a party
@@ -71,34 +106,56 @@ end
 -- @param subMode: The Sub-Mode the player should be queued to
 -- @param ELO?: Optional ELO the party has
 function PartyManager.QueueParty(LeaderPlayer: Player, mode: string, subMode: string, ELO: number?): ()
-    if not PartyManager.Parties[LeaderPlayer] then
+    local party = PartyManager.Parties[LeaderPlayer]
+
+    if not party then
         warn("QueueParty(): LeaderPlayer not found")
         return
     end
 
-    PartyManager.Modules.QueueManager:QueueParty(LeaderPlayer, PartyManager.Parties[LeaderPlayer], mode, subMode, ELO)
+    local matchSize = PartyManager.Modules.Settings.SubModes[subMode] and PartyManager.Modules.Settings.SubModes[subMode].MatchSize or 2
+    local maxPartySize = math.floor(matchSize / 2)
+    local totalPartySize = #party.Members + 1
+
+    if totalPartySize > maxPartySize then
+        warn(`QueueParty(): Party size {totalPartySize} exceeds max {maxPartySize} for {subMode}`)
+        return
+    end
+
+    for _, member in { LeaderPlayer, table.unpack(party.Members) } do
+        if PartyManager.Modules.QueueManager:IsPlayerQueued(member) then
+            warn(`QueueParty(): {member.Name} is already queued, cannot queue party`)
+            return
+        end
+    end
+
+    PartyManager.Modules.QueueManager:QueueParty(LeaderPlayer, party.Members, mode, subMode, party.PartyID, ELO)
 end
 
 -- StopParty(): Stop queues all members of a party
 -- @param LeaderPlayer: The player who created the party
 function PartyManager.StopParty(LeaderPlayer: Player): ()
-    if not PartyManager.Parties[LeaderPlayer] then
+    local party = PartyManager.Parties[LeaderPlayer]
+
+    if not party then
         warn("StopParty(): LeaderPlayer not found")
         return
     end
 
-    PartyManager.Modules.QueueManager:StopQueue({ LeaderPlayer, table.unpack(PartyManager.Parties[LeaderPlayer]) })
+    PartyManager.Modules.QueueManager:StopQueue({ LeaderPlayer, table.unpack(party.Members) })
 end
 
 -- DeleteParty(): Deletes a party, also stopping everyone currently queueing (Including the leader)
 -- @param LeaderPlayer: The player who created the party
 function PartyManager.DeleteParty(LeaderPlayer: Player): ()
-    if not PartyManager.Parties[LeaderPlayer] then
+    local party = PartyManager.Parties[LeaderPlayer]
+
+    if not party then
         warn("DeleteParty(): LeaderPlayer not found")
         return
     end
 
-    PartyManager.Modules.QueueManager:StopQueue({ LeaderPlayer, table.unpack(PartyManager.Parties[LeaderPlayer]) })
+    PartyManager.Modules.QueueManager:StopQueue({ LeaderPlayer, table.unpack(party.Members) })
 
     PartyManager.Parties[LeaderPlayer] = nil
 end
@@ -118,12 +175,17 @@ function PartyManager.AddPlayer(LeaderPlayer: Player, NewMember: Player): ()
 		return
 	end
 
-	if table.find(party, NewMember) then
+	if table.find(party.Members, NewMember) then
 		warn("AddPlayer(): Player already in the party")
 		return
 	end
 
-	table.insert(party, NewMember)
+	if LeaderPlayer == NewMember then
+		warn("AddPlayer(): Cannot add leader as member")
+		return
+	end
+
+	table.insert(party.Members, NewMember)
 end
 
 -- RemovePlayer(): Removes a player from a leaders party. If the leader is the only one in the party, it deletes the party
@@ -137,14 +199,13 @@ function PartyManager.RemovePlayer(LeaderPlayer: Player, Member: Player): ()
 		return
 	end
 
-	local index = table.find(party, Member)
+	local index = table.find(party.Members, Member)
 
     if index then
-        table.remove(party, index)
+        table.remove(party.Members, index)
     end
 
-
-	if #party == 0 then
+	if #party.Members == 0 then
 		PartyManager.DeleteParty(LeaderPlayer)
 	end
 end
@@ -157,15 +218,21 @@ end
 -- @param LeaderPlayer: The player who created the party
 -- @return { Player }?: The members
 function PartyManager.GetPartyMembers(LeaderPlayer: Player): { Player }?
-	return PartyManager.Parties[LeaderPlayer]
+	local party = PartyManager.Parties[LeaderPlayer]
+
+	return party and party.Members or nil
 end
 
 -- IsInParty(): Checks if a player is in any party
 -- @param PlayerToCheck: The player to check
 -- @return boolean: If they're in the party
 function PartyManager.IsInParty(PlayerToCheck: Player): boolean
-	for _, members in PartyManager.Parties do
-		if table.find(members, PlayerToCheck) then
+	if PartyManager.Parties[PlayerToCheck] then
+		return true
+	end
+
+	for _, partyData in PartyManager.Parties do
+		if table.find(partyData.Members, PlayerToCheck) then
 			return true
 		end
 	end
@@ -177,8 +244,12 @@ end
 -- @param PlayerToCheck: The player to check
 -- @return Player?: The leader, if found
 function PartyManager.GetLeader(PlayerToCheck: Player): Player?
-	for leader, members in PartyManager.Parties do
-		if table.find(members, PlayerToCheck) then
+	if PartyManager.Parties[PlayerToCheck] then
+		return PlayerToCheck
+	end
+
+	for leader, partyData in PartyManager.Parties do
+		if table.find(partyData.Members, PlayerToCheck) then
 			return leader
 		end
 	end
@@ -190,29 +261,46 @@ end
 -- @param LeaderPlayer: The player who created the party
 -- @return number: The party size
 function PartyManager.GetPartySize(LeaderPlayer: Player): number
-	local members = PartyManager.Parties[LeaderPlayer]
+	local party = PartyManager.Parties[LeaderPlayer]
 
-    return members and (#members + 1) or 1
+    return party and (#party.Members + 1) or 1
 end
 
--- CreateTeamsFromPartyMap(): Automatically creates parties from a PartyMap
--- @param partyMap: Types.PartyMap
-function PartyManager.CreateTeamsFromPartyMap(partyMap: Types.PartyMap): ()
-	for _, partyData in partyMap do
-        local leaderPlayer = PartyManager.PlayerLookup[partyData.Leader]
-        if not leaderPlayer then continue end
+-- CreateTeamsFromPartyMap(): Automatically creates parties from a server's party data
+-- @param serverParties: The party data for this server
+function PartyManager.CreateTeamsFromPartyMap(serverParties: { [string]: { Members: { number }, Leader: number? } }): ()
+	if not serverParties then
+		warn("CreateTeamsFromPartyMap(): No party data provided")
+		return
+	end
 
-        local members = {}
+	for partyId, partyData in serverParties do
+		if not partyData.Leader then
+			warn("CreateTeamsFromPartyMap(): Party missing leader", partyId)
+			continue
+		end
 
-        for _, userId in partyData.Members do
-            local player = PartyManager.PlayerLookup[userId]
+		local leaderPlayer = PartyManager.PlayerLookup[partyData.Leader]
 
-            if player and player ~= leaderPlayer then
-                table.insert(members, player)
-            end
-        end
+		if not leaderPlayer then
+			warn("CreateTeamsFromPartyMap(): Leader not found", partyData.Leader)
+			continue
+		end
 
-        PartyManager.CreateParty(leaderPlayer, members)
+		local members = {}
+
+		for _, userId in partyData.Members do
+			local player = PartyManager.PlayerLookup[userId]
+
+			if player and player ~= leaderPlayer then
+				table.insert(members, player)
+			end
+		end
+
+		PartyManager.Parties[leaderPlayer] = {
+			PartyID = partyId,
+			Members = members
+		}
 	end
 end
 

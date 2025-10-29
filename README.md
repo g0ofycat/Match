@@ -53,17 +53,15 @@ Settings.Matches = {
 
 	ELO_CHANGE = 200, -- // How close ELO can be for matchmaking
 	ELO_INCREASE_RATE = 50, -- // Higher ELO people may not be put in any matches. Finds more people in range every loop so they can be matchmaked
-	PRIORITIZE_WAIT_TIME = true, -- // When Continent Matchmaking fails, Matchmaking will be faster for people who have waited longer instead of people with closer ELO
 
 	-- // BATCHING
 
 	BATCH_SIZE = 50, -- // The Batch of the amount of keys fetched from the MemoryStore
-	MAX_FINDGROUP_ITERATIONS = 50, -- // Max amount of iterations to find the best group for the player
 	MAX_QUEUE_STATUS_PLAYERS = 50, -- // The max amount of players are gotten and sent for each PublishAsync
 
 	-- // LOCKING
 
-	LOCK_TIMEOUT = 10, -- // How long 'Locking' lives before being removed. Locking is a state that tells servers that the player is in a match so the edge case where 2 servers try to match make someone at the same time doesn't happen
+	LOCK_TIMEOUT = 10 -- // How long 'Locking' lives before being removed. Locking is a state that tells servers that the player is in a match so the edge case where 2 servers try to match make someone at the same time doesn't happen
 }
 
 Settings.Information = {
@@ -77,10 +75,8 @@ Settings.SubModes = { -- // Names of mode, totalPlayers is how many players can 
 	["1v1"] = { totalPlayers = 2 },
 	["2v2"] = { totalPlayers = 4 },
 	["3v3"] = { totalPlayers = 6 },
-	["4v4"] = { totalPlayers = 8 },
+	["4v4"] = { totalPlayers = 8 }
 }
-
-return Settings
 ```
 
 Most of the *Settings* are self explanitory, this section will mostly be about **Modes** and **SubModes**. You can create new modes by adding their name to **Settings.SubModes**, each mode will have all SubModes inside of them. SubModes are self explanitory, the key is the name of the SubMode and they hold a table which holds a **totalPlayers** variable which will see how many players can be in 1 match. *(e.x. 1v1 has 2 'totalPlayers' since it's a player versus a player)*.
