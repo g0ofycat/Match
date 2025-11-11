@@ -133,7 +133,7 @@ The others are self explanitory. Although to set up teams for partied players, y
 
 ```lua
 export type Parties = {
-    [string?]: {
+    [string]: {
         Members: { number },
         Leader: number?
     }
