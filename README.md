@@ -33,6 +33,13 @@ Match:StopQueue({player1, player2, player3})
 
 -- // Stop matchmaking loops
 Match:StopMatchmaking()
+
+-- // Function to run when matchmaking finds all players
+Match:OnMatchmake(function(matched_players)
+	print("Matchmaking complete!")
+
+	print(matched_players) -- // { Types.ParsedPlayerData }
+end)
 ```
 
 # Settings (How to use)

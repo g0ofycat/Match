@@ -29,6 +29,12 @@ local HelpersPath = script.Parent.modules.helpers
 local SubModulesPath = script.Parent.modules.sub_modules
 
 --=========================
+-- // TYPES
+--=========================
+
+local Types = require(HelpersPath.Types)
+
+--=========================
 -- // HELPERS
 --=========================
 
@@ -45,7 +51,8 @@ Match.SubModules = {
     QueueManager = require(SubModulesPath.QueueManager),
     CrossServerManager = require(SubModulesPath.CrossServerManager),
     MatchmakingEngine = require(SubModulesPath.MatchmakingEngine),
-    PartyManager = require(SubModulesPath.PartyManager)
+    PartyManager = require(SubModulesPath.PartyManager),
+	Signal = require(HelpersPath.Signal)
 }
 
 --=========================
@@ -86,6 +93,12 @@ end
 -- @param ELO?: Optional ELO the player has
 function Match:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, ELO: number?): ()
 	Match.SubModules.QueueManager:QueuePlayer(playerOrList, mode, subMode, ELO)
+end
+
+-- OnMatchmake(): Callback for when matchmaking starts
+-- @param functionOrCallback: What to run when the players are matchmaked
+function Match:OnMatchmake(functionOrCallback: (matched_players: { Types.ParsedPlayerData }) -> ()): ()
+	Match.SubModules.SharedData.signal:Connect(functionOrCallback)
 end
 
 -- StopQueue(): Removes the player(s) from all queues across every mode and subMode

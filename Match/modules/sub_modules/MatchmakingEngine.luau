@@ -24,7 +24,8 @@ MatchmakingEngine.Modules = {
 	SharedData = require(script.Parent.SharedData),
 	QueueManager = require(script.Parent.QueueManager),
 	CrossServerManager = require(script.Parent.CrossServerManager),
-	TeleportHandler = require(script.Parent.TeleportHandler)
+	TeleportHandler = require(script.Parent.TeleportHandler),
+	Signal = require(script.Parent.Parent.helpers.Signal)
 }
 
 --=========================
@@ -242,6 +243,8 @@ function MatchmakingEngine:CreateCrossServerMatch(players: { Types.ParsedPlayerD
 	end
 
 	print("Successfully created cross-server match", MatchmakingEngine.Modules.Settings.Information.SERVER_ID)
+
+	MatchmakingEngine.Modules.SharedData.signal:Fire(players)
 
 	return true
 end

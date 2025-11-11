@@ -93,7 +93,8 @@ export type MatchData = {
 
 	lastCacheCleanup: number,
 	heartbeatConnection: RBXScriptConnection?,
-	_lockMap: MemoryStoreSortedMap?
+	_lockMap: MemoryStoreSortedMap?,
+	signal: any
 }
 
 return nil
