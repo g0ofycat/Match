@@ -17,25 +17,25 @@ A customizable matchmaking system for Roblox games with **extremely** easy-to-us
 
 ```lua
 -- // Start matchmaking loops
-Match:StartMatchmaking()
+Match.StartMatchmaking()
 
 -- // Queue a player with an optional ELO parameter (Player, Mode, SubMode, ELO?)
-Match:QueuePlayer(player, "Ranked", "1v1", 1200)
+Match.QueuePlayer(player, "Ranked", "1v1", 1200)
 
 -- // Bulk queue multiple players (all in the same mode/submode, optional shared ELO)
-Match:QueuePlayer({player1, player2, player3}, "Ranked", "2v2", 1300)
+Match.QueuePlayer({player1, player2, player3}, "Ranked", "2v2", 1300)
 
 -- // Stop the queue of a player
-Match:StopQueue(player)
+Match.StopQueue(player)
 
 -- // Bulk stop the queue of multiple players
-Match:StopQueue({player1, player2, player3})
+Match.StopQueue({player1, player2, player3})
 
 -- // Stop matchmaking loops
-Match:StopMatchmaking()
+Match.StopMatchmaking()
 
 -- // Function to run when matchmaking finds all players
-Match:OnMatchmake(function(matched_players)
+Match.OnMatchmake(function(matched_players)
 	print("Matchmaking complete!")
 
 	print(matched_players) -- // { Types.ParsedPlayerData }

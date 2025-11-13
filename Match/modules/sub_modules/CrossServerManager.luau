@@ -32,7 +32,7 @@ CrossServerManager.Modules = {
 --=========================
 
 -- SetupMessagingService(): Sets up the messaging service subscribers
-function CrossServerManager:SetupMessagingService(): ()
+function CrossServerManager.SetupMessagingService(): ()
 	for _, c in CrossServerManager.Modules.SharedData.messagingConnections do
 		c:Disconnect()
 	end
@@ -57,7 +57,7 @@ function CrossServerManager:SetupMessagingService(): ()
 
 		if data.Mode and data.SubMode and data.RequestingServer ~= serverId then
 			task.spawn(function()
-				self:SendQueueStatus(data.Mode, data.SubMode, data.RequestingServer)
+				CrossServerManager.SendQueueStatus(data.Mode, data.SubMode, data.RequestingServer)
 			end)
 		end
 	end)
@@ -67,7 +67,7 @@ function CrossServerManager:SetupMessagingService(): ()
 
 		if data.PlayersForServer and data.PlayersForServer[serverId] then
 			task.spawn(function()
-				CrossServerManager.Modules.TeleportHandler:HandleTeleportRequest(data)
+				CrossServerManager.Modules.TeleportHandler.HandleTeleportRequest(data)
 			end)
 		end
 	end)
@@ -76,7 +76,7 @@ function CrossServerManager:SetupMessagingService(): ()
 		local data = msg.Data
 
 		if data.TargetServer == serverId then
-			self:ReceiveQueueStatus(data)
+			CrossServerManager.ReceiveQueueStatus(data)
 		end
 	end)
 end
@@ -84,7 +84,7 @@ end
 -- RequestCrossServerMatchmaking(): A wrapper for 'MatchmakingRequest' :PublishAsync()
 -- @param mode: The mode to request
 -- @param subMode: The subMode of the mode
-function CrossServerManager:RequestCrossServerMatchmaking(mode: string, subMode: string): ()
+function CrossServerManager.RequestCrossServerMatchmaking(mode: string, subMode: string): ()
 	pcall(function()
 		MessagingService:PublishAsync("MatchmakingRequest", {
 			Mode = mode,
@@ -101,7 +101,7 @@ end
 -- @param partyMapping: Party information for each player
 -- @param queueKey: The key of the queue
 -- @return boolean: True on success, false on failure
-function CrossServerManager:NotifyServersOfMatch(code: string, playersByServer: { [string]: { number } }, partyMapping: Types.PartyMap, queueKey: Types.QueueKey): boolean
+function CrossServerManager.NotifyServersOfMatch(code: string, playersByServer: { [string]: { number } }, partyMapping: Types.PartyMap, queueKey: Types.QueueKey): boolean
 	local success, err = pcall(function()
 		MessagingService:PublishAsync("CrossServerTeleport", {
 			MatchId = CrossServerManager.Modules.Settings.Information.SERVER_ID,
@@ -127,10 +127,10 @@ end
 -- @param mode: The mode to send
 -- @param subMode: The subMode of the mode
 -- @param targetServer: The server to send the status to
-function CrossServerManager:SendQueueStatus(mode: string, subMode: string, targetServer: string): ()
-	local queue = CrossServerManager.Modules.QueueManager:GetQueue(mode, subMode)
+function CrossServerManager.SendQueueStatus(mode: string, subMode: string, targetServer: string): ()
+	local queue = CrossServerManager.Modules.QueueManager.GetQueue(mode, subMode)
 	local players = {}
-	local matchSize = CrossServerManager.Modules.QueueManager:GetMatchSize(subMode)
+	local matchSize = CrossServerManager.Modules.QueueManager.GetMatchSize(subMode)
 	local maxPlayersPerQueueStatus = CrossServerManager.Modules.Settings.Matches.MAX_QUEUE_STATUS_PLAYERS or 50
 	local maxPlayers = math.clamp(math.min(maxPlayersPerQueueStatus, matchSize * 3), 1, 200)
 
@@ -198,7 +198,7 @@ end
 
 -- ReceiveQueueStatus(): Stores the Cross Server data for MessagingService to use and broadcast to servers
 -- @param data: Types.QueueStatusResponseData
-function CrossServerManager:ReceiveQueueStatus(data: Types.QueueStatusResponseData): ()
+function CrossServerManager.ReceiveQueueStatus(data: Types.QueueStatusResponseData): ()
 	if not CrossServerManager.Modules.SharedData.crossServerData[data.Mode] then
 		CrossServerManager.Modules.SharedData.crossServerData[data.Mode] = {}
 	end
@@ -226,7 +226,7 @@ end
 --=========================
 
 -- Cleanup(): Cleans up cross-server specific data
-function CrossServerManager:Cleanup(): ()
+function CrossServerManager.Cleanup(): ()
 	for _, connection in CrossServerManager.Modules.SharedData.messagingConnections do
 		pcall(function()
 			connection:Disconnect()
@@ -244,6 +244,6 @@ end
 -- // INIT
 --=========================
 
-CrossServerManager:SetupMessagingService()
+CrossServerManager.SetupMessagingService()
 
 return CrossServerManager

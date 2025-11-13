@@ -51,8 +51,7 @@ Match.SubModules = {
     QueueManager = require(SubModulesPath.QueueManager),
     CrossServerManager = require(SubModulesPath.CrossServerManager),
     MatchmakingEngine = require(SubModulesPath.MatchmakingEngine),
-    PartyManager = require(SubModulesPath.PartyManager),
-	Signal = require(HelpersPath.Signal)
+    PartyManager = require(SubModulesPath.PartyManager)
 }
 
 --=========================
@@ -63,12 +62,12 @@ Match.SubModules = {
 local function CleanupInit(): ()
 	Players.PlayerRemoving:Connect(function(player)
 		if player then
-			Match:StopQueue(player)
+			Match.StopQueue(player)
 		end
 	end)
 
 	game:BindToClose(function()
-		Match:Cleanup()
+		Match.Cleanup()
 	end)
 
 	local interval = Match.SubModules.QueueManager.Modules.Settings.Matches.CACHE_CLEANUP_INTERVAL or 60
@@ -76,7 +75,7 @@ local function CleanupInit(): ()
 
 	Match.SubModules.SharedData.heartbeatConnection = RunService.Heartbeat:Connect(function()
 		if tick() - lastTick >= interval then
-			Match.SubModules.QueueManager:RunHeartbeat()
+			Match.SubModules.QueueManager.RunHeartbeat()
 			lastTick = tick()
 		end
 	end)
@@ -91,38 +90,38 @@ end
 -- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
 -- @param ELO?: Optional ELO the player has
-function Match:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, ELO: number?): ()
-	Match.SubModules.QueueManager:QueuePlayer(playerOrList, mode, subMode, ELO)
+function Match.QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, ELO: number?): ()
+	Match.SubModules.QueueManager.QueuePlayer(playerOrList, mode, subMode, ELO)
 end
 
 -- OnMatchmake(): Callback for when matchmaking starts
 -- @param functionOrCallback: What to run when the players are matchmaked
-function Match:OnMatchmake(functionOrCallback: (matched_players: { Types.ParsedPlayerData }) -> ()): ()
+function Match.OnMatchmake(functionOrCallback: (matched_players: { Types.ParsedPlayerData }) -> ()): ()
 	Match.SubModules.SharedData.signal:Connect(functionOrCallback)
 end
 
 -- StopQueue(): Removes the player(s) from all queues across every mode and subMode
 -- @param playerOrList: The player(s) to remove from queues. Pass a single player or a list of players for bulk removal
 -- @return boolean: True if all players were successfully removed from their queues, false if any failures occurred
-function Match:StopQueue(playerOrList: Player | { Player }): boolean
-	return Match.SubModules.QueueManager:StopQueue(playerOrList)
+function Match.StopQueue(playerOrList: Player | { Player }): boolean
+	return Match.SubModules.QueueManager.StopQueue(playerOrList)
 end
 
 -- MatchMake(): Globally handles and checks all players eligible for Matchmaking based on their Mode and subMode and teleports them
 -- @param mode: The mode the player should be queued to (Match.Helpers.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Helpers.Settings.SubModes)
-function Match:MatchMake(mode: string, subMode: string): ()
-	Match.SubModules.MatchmakingEngine:MatchMake(mode, subMode)
+function Match.MatchMake(mode: string, subMode: string): ()
+	Match.SubModules.MatchmakingEngine.MatchMake(mode, subMode)
 end
 
 -- StartMatchmaking(): Starts continuous matchmaking loops for all modes and sub-modes; Each loop calls MatchMake at intervals defined by Settings.Matches.CHECK_MATCHMAKING_INTERVALS
-function Match:StartMatchmaking(): ()
-	Match.SubModules.MatchmakingEngine:StartMatchmaking()
+function Match.StartMatchmaking(): ()
+	Match.SubModules.MatchmakingEngine.StartMatchmaking()
 end
 
 -- StopMatchmaking(): Stops all currently running matchmaking loops that were started with StartMatchmaking; Cancels all tasks and clears the internal task table
-function Match:StopMatchmaking(): ()
-	Match.SubModules.MatchmakingEngine:StopMatchmaking()
+function Match.StopMatchmaking(): ()
+	Match.SubModules.MatchmakingEngine.StopMatchmaking()
 end
 
 --=========================
@@ -134,16 +133,16 @@ end
 -- @param mode: The mode the player should be queued to (Match.Helpers.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Helpers.Settings.SubModes)
 -- @return boolean: If the player is queued or not
-function Match:IsPlayerQueued(player: Player, mode: string?, subMode: string?): boolean
-	return Match.SubModules.QueueManager:IsPlayerQueued(player, mode, subMode)
+function Match.IsPlayerQueued(player: Player, mode: string?, subMode: string?): boolean
+	return Match.SubModules.QueueManager.IsPlayerQueued(player, mode, subMode)
 end
 
 -- GetQueuedPlayers(): Get all of the queued players in a subMode's mode
 -- @param mode: The mode the player should be queued to (Match.Helpers.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Helpers.Settings.SubModes)
 -- @return { number }: A list of UserIds of the queued players
-function Match:GetQueuedPlayers(mode: string, subMode: string): { number }
-	return Match.SubModules.QueueManager:GetQueuedPlayers(mode, subMode)
+function Match.GetQueuedPlayers(mode: string, subMode: string): { number }
+	return Match.SubModules.QueueManager.GetQueuedPlayers(mode, subMode)
 end
 
 -- GetPlayerJoinTime(): Gets the players join time in a subMode's mode
@@ -151,16 +150,16 @@ end
 -- @param mode: The mode the player should be queued to (Match.Helpers.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Helpers.Settings.SubModes)
 -- @return number?: The join time of the player if found, otherwise nil
-function Match:GetPlayerJoinTime(player: Player, mode: string, subMode: string): number?
-	return Match.SubModules.QueueManager:GetPlayerJoinTime(player, mode, subMode)
+function Match.GetPlayerJoinTime(player: Player, mode: string, subMode: string): number?
+	return Match.SubModules.QueueManager.GetPlayerJoinTime(player, mode, subMode)
 end
 
 -- GetQueueCount(): Gets the local queue count in a subMode's mode
 -- @param mode: The mode the player should be queued to (Match.Helpers.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.Helpers.Settings.SubModes)
 -- @return number: The total number of players in the queue
-function Match:GetQueueCount(mode: string, subMode: string): number
-	return Match.SubModules.QueueManager:GetQueueCount(mode, subMode)
+function Match.GetQueueCount(mode: string, subMode: string): number
+	return Match.SubModules.QueueManager.GetQueueCount(mode, subMode)
 end
 
 --=========================
@@ -168,10 +167,10 @@ end
 --=========================
 
 -- Cleanup(): Cleans up all caches
-function Match:Cleanup()
-	Match.SubModules.CrossServerManager:Cleanup()
-	Match.SubModules.QueueManager:Cleanup()
-	Match.SubModules.MatchmakingEngine:Cleanup()
+function Match.Cleanup()
+	Match.SubModules.CrossServerManager.Cleanup()
+	Match.SubModules.QueueManager.Cleanup()
+	Match.SubModules.MatchmakingEngine.Cleanup()
 end
 
 CleanupInit()

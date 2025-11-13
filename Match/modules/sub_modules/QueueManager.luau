@@ -69,7 +69,7 @@ end
 -- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
 -- @param ELO?: Optional ELO the player has
-function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, ELO: number?): ()
+function QueueManager.QueuePlayer(playerOrList: Player | { Player }, mode: string, subMode: string, ELO: number?): ()
 	assert(table.find(QueueManager.Modules.Settings.Modes, mode), "'mode' doesn't exist in Settings.Modes")
 	assert(QueueManager.Modules.Settings.SubModes[subMode], "'subMode' doesn't exist in Settings.SubModes")
 
@@ -91,7 +91,7 @@ function QueueManager:QueuePlayer(playerOrList: Player | { Player }, mode: strin
 		local key, data = generatePlayerQueueData(player, nil, false, playerContinent, ELO or 0)
 
 		local success, err = pcall(function()
-			self:GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
+			QueueManager.GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
 		end)
 
 		if success then
@@ -119,7 +119,7 @@ end
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
 -- @param partyID: The party ID from PartyManager
 -- @param ELO?: Optional ELO the player has
-function QueueManager:QueueParty(leaderPlayer: Player, partyMembers: { Player }, mode: string, subMode: string, partyID: string, ELO: number?): ()
+function QueueManager.QueueParty(leaderPlayer: Player, partyMembers: { Player }, mode: string, subMode: string, partyID: string, ELO: number?): ()
 	assert(#partyMembers > 0, "QueueParty(): Party must have at least one member")
 	assert(partyID, "QueueParty(): partyID is required")
 
@@ -145,7 +145,7 @@ function QueueManager:QueueParty(leaderPlayer: Player, partyMembers: { Player },
 		end
 
 		local success, err = pcall(function()
-			self:GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
+			QueueManager.GetQueue(mode, subMode):SetAsync(key, data, QueueManager.Modules.Settings.Matches.MATCHMAKING_DURATION)
 		end)
 
 		if success then
@@ -167,7 +167,7 @@ function QueueManager:QueueParty(leaderPlayer: Player, partyMembers: { Player },
 		warn(`QueueParty(): {#failedPlayers} players failed to queue, rolling back party`)
 
 		for _, player in queuedPlayers do
-			self:StopQueue(player)
+			QueueManager.StopQueue(player)
 		end
 
 		return
@@ -184,10 +184,10 @@ end
 -- StopQueue(): Removes the player(s) from all queues across every mode and subMode
 -- @param playerOrList: The player(s) to remove from queues. Pass a single player or a list of players for bulk removal
 -- @return boolean: True if all players were successfully removed from their queues, false if any failures occurred
-function QueueManager:StopQueue(playerOrList: Player | { Player }): boolean
+function QueueManager.StopQueue(playerOrList: Player | { Player }): boolean
 	local players: { Player } = typeof(playerOrList) == "Instance" and { playerOrList } or playerOrList :: { Player }
 	local allSuccess = true
-	local lockMap = self:GetLockMap()
+	local lockMap = QueueManager.GetLockMap()
 
 	for _, player in players do
 		if not player or not player.UserId then
@@ -210,7 +210,7 @@ function QueueManager:StopQueue(playerOrList: Player | { Player }): boolean
 		for mode, subModes in playerQueues do
 			for subMode, keyToRemove in subModes do
 				local success = pcall(function()
-					self:GetQueue(mode, subMode):RemoveAsync(keyToRemove)
+					QueueManager.GetQueue(mode, subMode):RemoveAsync(keyToRemove)
 				end)
 
 				if not success then
@@ -245,7 +245,7 @@ end
 -- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
 -- @return boolean: If the player is queued or not
-function QueueManager:IsPlayerQueued(player: Player, mode: string?, subMode: string?): boolean
+function QueueManager.IsPlayerQueued(player: Player, mode: string?, subMode: string?): boolean
 	local queues = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId]
 
 	if not queues then
@@ -263,10 +263,10 @@ end
 -- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
 -- @return { number }: A list of UserIds of the queued players
-function QueueManager:GetQueuedPlayers(mode: string, subMode: string): { number }
+function QueueManager.GetQueuedPlayers(mode: string, subMode: string): { number }
 	local players = {}
-	local queue = self:GetQueue(mode, subMode)
-	local matchSize = self:GetMatchSize(subMode)
+	local queue = QueueManager.GetQueue(mode, subMode)
+	local matchSize = QueueManager.GetMatchSize(subMode)
 	local batchSize = math.clamp(matchSize :: number * QueueManager.Modules.Settings.Matches.BATCH_SIZE, 1, 200)
 
 	local success, result = pcall(function()
@@ -295,14 +295,14 @@ end
 -- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
 -- @return number?: The join time of the player if found, otherwise nil
-function QueueManager:GetPlayerJoinTime(player: Player, mode: string, subMode: string): number?
+function QueueManager.GetPlayerJoinTime(player: Player, mode: string, subMode: string): number?
 	local key = QueueManager.Modules.SharedData.playerQueueKeys[player.UserId]
 		and QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode]
 		and QueueManager.Modules.SharedData.playerQueueKeys[player.UserId][mode][subMode]
 
 	if not key then return nil end
 
-	local queue = self:GetQueue(mode, subMode)
+	local queue = QueueManager.GetQueue(mode, subMode)
 
 	local success, value = pcall(function()
 		return queue:GetAsync(key)
@@ -327,7 +327,7 @@ end
 -- @param mode: The mode the player should be queued to (Match.QueueManager.Modules.Settings.Modes)
 -- @param subMode: The Sub-Mode the player should be queued to (Keys of Match.QueueManager.Modules.Settings.SubModes)
 -- @return number: The total number of players in the queue
-function QueueManager:GetQueueCount(mode: string, subMode: string): number
+function QueueManager.GetQueueCount(mode: string, subMode: string): number
 	if not QueueManager.Modules.SharedData.localQueueCounts[mode] then
 		return 0
 	end
@@ -342,7 +342,7 @@ end
 -- GetMatchSize(): Returns the total number of players required for a match in the given subMode
 -- @param subMode: The subMode
 -- @return number: totalPlayers
-function QueueManager:GetMatchSize(subMode: string): number
+function QueueManager.GetMatchSize(subMode: string): number
 	if QueueManager.Modules.Settings.SubModes[subMode] then
 		return QueueManager.Modules.Settings.SubModes[subMode].totalPlayers
 	end
@@ -356,7 +356,7 @@ end
 -- @param mode: The mode to get
 -- @param subMode: The subMode of the mode
 -- @return MemoryStoreSortedMap
-function QueueManager:GetQueue(mode: string, subMode: string): MemoryStoreSortedMap
+function QueueManager.GetQueue(mode: string, subMode: string): MemoryStoreSortedMap
 	if not QueueManager.Modules.SharedData.queueCache[mode] then
     	QueueManager.Modules.SharedData.queueCache[mode] = {}
 	end
@@ -375,7 +375,7 @@ end
 
 -- GetLockMap(): Returns MatchLocks
 -- @return MemoryStoreSortedMap
-function QueueManager:GetLockMap(): MemoryStoreSortedMap
+function QueueManager.GetLockMap(): MemoryStoreSortedMap
 	if not QueueManager.Modules.SharedData._lockMap then
 		QueueManager.Modules.SharedData._lockMap = MemoryStoreService:GetSortedMap("MatchLocks")
 	end
@@ -384,7 +384,7 @@ function QueueManager:GetLockMap(): MemoryStoreSortedMap
 end
 
 -- RunHeartbeat(): Runs cache cleanup on heartbeat
-function QueueManager:RunHeartbeat(): ()
+function QueueManager.RunHeartbeat(): ()
 	local now = tick()
 
 	for mode, subModes in QueueManager.Modules.SharedData.queueCache do
@@ -433,7 +433,7 @@ end
 --=========================
 
 -- Cleanup(): Cleans up queue-specific data
-function QueueManager:Cleanup(): ()
+function QueueManager.Cleanup(): ()
 	QueueManager.Modules.SharedData.queueCache = {}
 	QueueManager.Modules.SharedData.localQueueCounts = {}
 	QueueManager.Modules.SharedData.playerQueueKeys = {}
