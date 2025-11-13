@@ -55,7 +55,7 @@ local function CleanupInit(): ()
             local isInMatch = false
 
             for _, member in { player, table.unpack(party.Members) } do
-                if PartyManager.Modules.QueueManager:IsPlayerQueued(member) then
+                if PartyManager.Modules.QueueManager.IsPlayerQueued(member) then
                     isInMatch = true
                     break
                 end
@@ -123,13 +123,13 @@ function PartyManager.QueueParty(LeaderPlayer: Player, mode: string, subMode: st
     end
 
     for _, member in { LeaderPlayer, table.unpack(party.Members) } do
-        if PartyManager.Modules.QueueManager:IsPlayerQueued(member) then
+        if PartyManager.Modules.QueueManager.IsPlayerQueued(member) then
             warn(`QueueParty(): {member.Name} is already queued, cannot queue party`)
             return
         end
     end
 
-    PartyManager.Modules.QueueManager:QueueParty(LeaderPlayer, party.Members, mode, subMode, party.PartyID, ELO)
+    PartyManager.Modules.QueueManager.QueueParty(LeaderPlayer, party.Members, mode, subMode, party.PartyID, ELO)
 end
 
 -- StopParty(): Stop queues all members of a party
@@ -142,7 +142,7 @@ function PartyManager.StopParty(LeaderPlayer: Player): ()
         return
     end
 
-    PartyManager.Modules.QueueManager:StopQueue({ LeaderPlayer, table.unpack(party.Members) })
+    PartyManager.Modules.QueueManager.StopQueue({ LeaderPlayer, table.unpack(party.Members) })
 end
 
 -- DeleteParty(): Deletes a party, also stopping everyone currently queueing (Including the leader)
@@ -155,7 +155,7 @@ function PartyManager.DeleteParty(LeaderPlayer: Player): ()
         return
     end
 
-    PartyManager.Modules.QueueManager:StopQueue({ LeaderPlayer, table.unpack(party.Members) })
+    PartyManager.Modules.QueueManager.StopQueue({ LeaderPlayer, table.unpack(party.Members) })
 
     PartyManager.Parties[LeaderPlayer] = nil
 end
