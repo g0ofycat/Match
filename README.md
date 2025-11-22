@@ -143,3 +143,5 @@ export type Parties = {
 You can easily convert the **Parties** table into actual teams by using **Match.Modules.PartyManager.CreateTeamsFromPartyMap(Parties)**
 
 *PR's are welcome, let me know if you find any bugs or changes that this project can use!*
+
+<small>support me 🙏: https://www.roblox.com/games/78613731270986/im-broke-pls-dono</small>
