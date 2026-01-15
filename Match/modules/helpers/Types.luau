@@ -60,7 +60,7 @@ export type CrossServerData = {
 
 export type PartyMap = {
     [string]: {
-        [string?]:
+        [string]:
         {
             Members: { number },
             Leader: number?
