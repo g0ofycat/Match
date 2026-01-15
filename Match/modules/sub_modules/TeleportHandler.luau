@@ -48,7 +48,7 @@ function TeleportHandler.HandleTeleportRequest(data: Types.TeleportRequestData):
 
 	if #playersToTeleport == 0 then return end
 
-	print("Teleporting", #playersToTeleport, "players to cross-server match")
+	print("HandleTeleportRequest(): Teleporting", #playersToTeleport, "players to cross-server match")
 
 	local maxRetries = TeleportHandler.Modules.Settings.Matches.TELEPORT_RETRIES
 
@@ -66,10 +66,10 @@ function TeleportHandler.HandleTeleportRequest(data: Types.TeleportRequestData):
 		end)
 
 		if success then
-			print(`Successfully teleported {#playersToTeleport} players on attempt {attempt}`)
+			print(`HandleTeleportRequest(): Successfully teleported {#playersToTeleport} players on attempt {attempt}`)
 			return
 		else
-			print(`Attempt {attempt} failed: {err}, retrying {#playersToTeleport} players`)
+			print(`HandleTeleportRequest(): Attempt {attempt} failed: {err}, retrying {#playersToTeleport} players`)
 		end
 
 		local stillValid = {}
@@ -88,7 +88,7 @@ function TeleportHandler.HandleTeleportRequest(data: Types.TeleportRequestData):
 	end
 
 	if #playersToTeleport > 0 then
-		warn(`Failed to teleport {#playersToTeleport} players after {maxRetries} attempts`)
+		warn(`HandleTeleportRequest(): Failed to teleport {#playersToTeleport} players after {maxRetries} attempts`)
 
 		local failedIds = {}
 
@@ -108,7 +108,7 @@ function TeleportHandler.ReserveMatchServer(): string?
 	end)
 
 	if not success or not result then
-		warn("Failed to reserve server:", result)
+		warn("ReserveMatchServer(): Failed to reserve server:", result)
 		return nil
 	end
 

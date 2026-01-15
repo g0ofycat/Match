@@ -53,7 +53,7 @@ local function generatePlayerQueueData(player: Player, partyID: string?, isLeade
 	local success, encoded = pcall(HttpService.JSONEncode, HttpService, data)
 
 	if not success then
-		warn("Failed to JSONEncode player queue data for " .. tostring(player.UserId) .. ": " .. encoded)
+		warn("generatePlayerQueueData(): Failed to JSONEncode player queue data for " .. tostring(player.UserId) .. ": " .. encoded)
 		return key, nil
 	end
 
@@ -77,7 +77,7 @@ function QueueManager.QueuePlayer(playerOrList: Player | { Player }, mode: strin
 
 	for _, player in players do
 		if QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] then
-			warn(player.Name .. " is already in a queue")
+			warn("QueuePlayer(): " .. player.Name .. " is already in a queue")
 			return
 		end
 
@@ -104,9 +104,9 @@ function QueueManager.QueuePlayer(playerOrList: Player | { Player }, mode: strin
 			end
 			QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] = (QueueManager.Modules.SharedData.localQueueCounts[mode][subMode] or 0) + 1
 
-			print("Queued player", player.Name, "for", mode, subMode, "mode. Region:", playerContinent)
+			print("QueuePlayer(): Queued player", player.Name, "for", mode, subMode, "mode. Region:", playerContinent)
 		else
-			warn("Failed to queue player:", err)
+			warn("QueuePlayer(): Failed to queue player:", err)
             continue
 		end
 	end
@@ -120,6 +120,11 @@ end
 -- @param partyID: The party ID from PartyManager
 -- @param ELO?: Optional ELO the player has
 function QueueManager.QueueParty(leaderPlayer: Player, partyMembers: { Player }, mode: string, subMode: string, partyID: string, ELO: number?): ()
+	if QueueManager.IsPlayerQueued(leaderPlayer) then
+		warn("QueueParty(): Leader already queued")
+		return
+	end
+
 	assert(#partyMembers > 0, "QueueParty(): Party must have at least one member")
 	assert(partyID, "QueueParty(): partyID is required")
 
@@ -173,7 +178,7 @@ function QueueManager.QueueParty(leaderPlayer: Player, partyMembers: { Player },
 		return
 	end
 
-	print((`Queued party led by %s with %d members for %s / %s`):format(
+	print((`QueueParty(): Queued party led by %s with %d members for %s / %s`):format(
 		leaderPlayer.Name,
 		#partyMembers,
 		mode,
@@ -214,7 +219,7 @@ function QueueManager.StopQueue(playerOrList: Player | { Player }): boolean
 				end)
 
 				if not success then
-					warn("Failed to remove from queue:", mode, subMode)
+					warn("StopQueue(): Failed to remove from queue:", mode, subMode)
 					allSuccess = false
 					continue
 				end
@@ -280,11 +285,11 @@ function QueueManager.GetQueuedPlayers(mode: string, subMode: string): { number 
 			if ok and data and data.UserId then
 				table.insert(players, data.UserId)
 			else
-				warn("Skipped bad queue entry: " .. entry.key)
+				warn("GetQueuedPlayers(): Skipped bad queue entry: " .. entry.key)
 			end
 		end
 	else
-		warn("Failed to get queue range for " .. mode .. "-" .. subMode)
+		warn("GetQueuedPlayers(): Failed to get queue range for " .. mode .. "-" .. subMode)
 	end
 
 	return players
@@ -314,10 +319,10 @@ function QueueManager.GetPlayerJoinTime(player: Player, mode: string, subMode: s
 		if ok and data and data.JoinTime then
 			return data.JoinTime
 		else
-			warn("Failed to decode join time for " .. tostring(player.UserId))
+			warn("GetPlayerJoinTime(): Failed to decode join time for " .. tostring(player.UserId))
 		end
 	else
-		warn("Failed to get async for key: " .. key)
+		warn("GetPlayerJoinTime(): Failed to get async for key: " .. key)
 	end
 
 	return nil
@@ -347,7 +352,7 @@ function QueueManager.GetMatchSize(subMode: string): number
 		return QueueManager.Modules.Settings.SubModes[subMode].totalPlayers
 	end
 
-	warn("Unknown subMode:", subMode, "- using default size of 2")
+	warn("GetMatchSize(): Unknown subMode:", subMode, "- using default size of 2")
 
 	return 2
 end

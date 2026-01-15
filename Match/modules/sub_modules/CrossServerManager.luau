@@ -116,7 +116,7 @@ function CrossServerManager.NotifyServersOfMatch(code: string, playersByServer: 
 	end)
 
 	if not success then
-		warn("Failed to notify servers:", err)
+		warn("NotifyServersOfMatch(): Failed to notify servers:", err)
 		return false
 	end
 

@@ -46,7 +46,7 @@ function MatchmakingEngine.CanStartMatchmaking(queueKey: Types.QueueKey): boolea
 	local matchSize = MatchmakingEngine.Modules.QueueManager.GetMatchSize(queueKey.SubMode)
 
 	if matchSize % 2 ~= 0 then
-		warn("Invalid match size for", queueKey.SubMode, "- must be even number")
+		warn("CanStartMatchmaking(): Invalid match size for", queueKey.SubMode, "- must be even number")
 		return false
 	end
 
@@ -69,7 +69,7 @@ function MatchmakingEngine.ProcessMatchmaking(queueKey: Types.QueueKey): ()
 	if bestGroup then
 		MatchmakingEngine.CreateCrossServerMatch(bestGroup, queueKey)
 	else
-		warn("No optimal group found for", queueKey.Mode, queueKey.SubMode)
+		warn("ProcessMatchmaking(): No optimal group found for", queueKey.Mode, queueKey.SubMode)
 	end
 end
 
@@ -85,7 +85,7 @@ function MatchmakingEngine.CollectPlayers(queueKey: Types.QueueKey): { Types.Par
 	local queue = MatchmakingEngine.Modules.QueueManager.GetQueue(queueKey.Mode, queueKey.SubMode)
 	local batchSize = math.clamp(MatchmakingEngine.Modules.QueueManager.GetMatchSize(queueKey.SubMode) * MatchmakingEngine.Modules.Settings.Matches.BATCH_SIZE, 1, 200)
 
-	print("Processing matchmaking: Found", MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode][queueKey.SubMode], "total players for", queueKey.Mode, queueKey.SubMode)
+	print("CollectPlayers(): Processing matchmaking: Found", MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode][queueKey.SubMode], "total players for", queueKey.Mode, queueKey.SubMode)
 
 	local success, result = pcall(function()
 		return queue:GetRangeAsync(Enum.SortDirection.Ascending, batchSize)
@@ -100,7 +100,7 @@ function MatchmakingEngine.CollectPlayers(queueKey: Types.QueueKey): { Types.Par
 			end
 		end
 	else
-		warn("Failed to collect players from queue:", queueKey.Mode, queueKey.SubMode)
+		warn("CollectPlayers(): Failed to collect players from queue:", queueKey.Mode, queueKey.SubMode)
 	end
 
 	return allPlayers
@@ -114,7 +114,7 @@ function MatchmakingEngine.ParseQueueEntry(entry: { key: string, value: Types.Pl
 	local success, data = pcall(HttpService.JSONDecode, HttpService, entry.value)
 
 	if not success or not data or not data.UserId or not data.ELO then
-		error("Failed to parse queue entry: " .. entry.key)
+		error("ParseQueueEntry(): Failed to parse queue entry: " .. entry.key)
 	end
 
 	return {
@@ -168,8 +168,9 @@ function MatchmakingEngine.FindOptimalPlayerGroup(allPlayers: { Types.ParsedPlay
 
 	for _, group in sortedContinents do
 		local match = MatchmakingEngine.FormMatchFromUnits(group.units, matchSize)
-		if match then 
-			return match 
+
+		if match then
+			return match
 		end
 	end
 
@@ -207,11 +208,11 @@ end
 -- @return boolean: True if the match was successfully created, false otherwise
 function MatchmakingEngine.CreateCrossServerMatch(players: { Types.ParsedPlayerData }, queueKey: Types.QueueKey): boolean
 	if not players or #players == 0 then
-		warn("No players provided for match creation")
+		warn("CreateCrossServerMatch(): No players provided for match creation")
 		return false
 	end
 
-	print("Creating cross-server match with", #players, "players for", queueKey.Mode, queueKey.SubMode)
+	print("CreateCrossServerMatch(): Creating cross-server match with", #players, "players for", queueKey.Mode, queueKey.SubMode)
 
 	local lockedPlayerIds = MatchmakingEngine.LockAllPlayers(players)
 
@@ -231,7 +232,7 @@ function MatchmakingEngine.CreateCrossServerMatch(players: { Types.ParsedPlayerD
 	MatchmakingEngine.UpdateLocalQueueCount(players, queueKey)
 
 	if removalFailures > 0 then
-		warn(removalFailures, "queue removal failures occurred")
+		warn("CreateCrossServerMatch():", removalFailures, "queue removal failures occurred")
 	end
 
 	local notifySuccess = MatchmakingEngine.Modules.CrossServerManager.NotifyServersOfMatch(code, playersByServer, partyMapping, queueKey)
@@ -241,7 +242,7 @@ function MatchmakingEngine.CreateCrossServerMatch(players: { Types.ParsedPlayerD
 		return false
 	end
 
-	print("Successfully created cross-server match", MatchmakingEngine.Modules.Settings.Information.SERVER_ID)
+	print("CreateCrossServerMatch(): Successfully created cross-server match", MatchmakingEngine.Modules.Settings.Information.SERVER_ID)
 
 	MatchmakingEngine.Modules.SharedData.signal:Fire(players)
 
@@ -257,12 +258,12 @@ function MatchmakingEngine.LockAllPlayers(players: { Types.ParsedPlayerData }): 
 
 	for _, playerData in players do
 		if not playerData.UserId then
-			warn("Invalid player data missing UserId")
+			warn("LockAllPlayers(): Invalid player data missing UserId")
 			MatchmakingEngine.Modules.TeleportHandler.UnlockPlayers(lockedPlayerIds)
 			return nil
 		end
 
-		local success, err = pcall(function()
+		local success, result = pcall(function()
 			return lockMap:UpdateAsync(
 				tostring(playerData.UserId),
 				function(oldData): any
@@ -281,9 +282,11 @@ function MatchmakingEngine.LockAllPlayers(players: { Types.ParsedPlayerData }): 
 			)
 		end)
 
-		if not success or not err then
-			warn("Failed to lock player", playerData.UserId, ":", err)
+		if not success or not result then
+			warn("LockAllPlayers(): Failed to lock player", playerData.UserId, ":", result)
+
 			MatchmakingEngine.Modules.TeleportHandler.UnlockPlayers(lockedPlayerIds)
+
 			return nil
 		end
 
@@ -310,28 +313,29 @@ function MatchmakingEngine.ProcessPlayerRemoval(players: { Types.ParsedPlayerDat
 
 		if not success then
 			removalFailures += 1
-			warn("Failed to remove player from queue:", playerData.UserId, err)
+			warn("ProcessPlayerRemoval(): Failed to remove player from queue:", playerData.UserId, err)
 			continue
 		end
 
+		local originServerId = playerData.ServerId
 		local serverId = playerData.ServerId
         local partyId = playerData.PartyID
 
-		playersByServer[serverId] = playersByServer[serverId] or {}
-		table.insert(playersByServer[serverId], playerData.UserId)
+		playersByServer[originServerId] = playersByServer[originServerId] or {}
+		table.insert(playersByServer[originServerId], playerData.UserId)
 
 		if partyId then
-            partyMapping[serverId] = partyMapping[serverId] or {}
-            partyMapping[serverId][partyId] = partyMapping[serverId][partyId] or { Members = {}, Leader = nil }
+			partyMapping[serverId] = partyMapping[serverId] or {}
+			partyMapping[serverId][partyId] = partyMapping[serverId][partyId] or { Members = {}, Leader = nil }
 
-            table.insert(partyMapping[serverId][partyId].Members, playerData.UserId)
+			table.insert(partyMapping[serverId][partyId].Members, playerData.UserId)
 
-            if playerData.IsPartyLeader and partyMapping[serverId][partyId] then
-                partyMapping[serverId][partyId].Leader = playerData.UserId
-            end
-        end
+			if playerData.IsPartyLeader then
+				partyMapping[serverId][partyId].Leader = playerData.UserId
+			end
+		end
 
-		if serverId ~= MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
+		if originServerId ~= MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
 			continue
 		end
 
@@ -407,7 +411,7 @@ function MatchmakingEngine.CreateMatchmakingUnits(players: { Types.ParsedPlayerD
 
 	for partyId, party in parties do
 		if not partyLeaders[partyId] then
-			warn(`Party {partyId} missing leader, splitting into solos`)
+			warn(`CreateMatchmakingUnits(): Party {partyId} missing leader, splitting into solos`)
 			for _, player in party do
 				table.insert(units, { player })
 			end
@@ -453,7 +457,7 @@ function MatchmakingEngine.FormMatchFromUnits(units: { { Types.ParsedPlayerData 
 		end
 	end
 
-    warn(`No valid match formed from {#validUnits} units for {matchSize}-player match`)
+    warn(`FormMatchFromUnits(): No valid match formed from {#validUnits} units for {matchSize}-player match`)
 
 	return nil
 end
@@ -518,7 +522,9 @@ function MatchmakingEngine.BuildMatchFromSeed(units: { { Types.ParsedPlayerData 
 			if MatchmakingEngine.IsMatchValid(currentMatch) then
 				return currentMatch
 			else
-				return nil
+				for _ = 1, candidate.size do
+					table.remove(currentMatch)
+				end
 			end
 		end
 	end
@@ -625,7 +631,7 @@ function MatchmakingEngine.MatchMake(mode: string, subMode: string): ()
 	MatchmakingEngine.Modules.SharedData.isProcessingMatch[queueKey.Mode][queueKey.SubMode] = true
 
 	local function errHandler(err)
-		warn("Matchmaking error:", err, debug.traceback())
+		warn("MatchMake(): Matchmaking error:", err, debug.traceback())
 	end
 
 	xpcall(function()
@@ -672,7 +678,7 @@ function MatchmakingEngine.RunMatchmakingLoop(mode: string, subMode: string): ()
 		end)
 
 		if not success then
-			warn(`Matchmaking error for {mode} {subMode}:`, err)
+			warn(`RunMatchmakingLoop(): Matchmaking error for {mode} {subMode}:`, err)
 		end
 	end
 end

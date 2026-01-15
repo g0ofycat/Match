@@ -76,7 +76,7 @@ function PlayerLocation.GetPlayerContinent(player: Player): string?
 	end
 
 	if PlayerLocation.continentCache[player.UserId] then
-		print("Using cached continent for " .. player.Name .. ": " .. PlayerLocation.continentCache[player.UserId])
+		print("GetPlayerContinent(): Using cached continent for " .. player.Name .. ": " .. PlayerLocation.continentCache[player.UserId])
 		return PlayerLocation.continentCache[player.UserId]
 	end
 
@@ -91,7 +91,7 @@ function PlayerLocation.GetPlayerContinent(player: Player): string?
 
 		return continent
 	else
-		print("Failed to get country code for player.")
+		print("GetPlayerContinent(): Failed to get country code for player.")
 		return nil
 	end
 end
