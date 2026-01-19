@@ -62,8 +62,6 @@ function MatchmakingEngine.ProcessMatchmaking(queueKey: Types.QueueKey): ()
 		return
 	end
 
-	MatchmakingEngine.Modules.CrossServerManager.RequestCrossServerMatchmaking(queueKey.Mode, queueKey.SubMode)
-
 	local bestGroup = MatchmakingEngine.FindOptimalPlayerGroup(allPlayers, queueKey.SubMode)
 
 	if bestGroup then
@@ -227,9 +225,9 @@ function MatchmakingEngine.CreateCrossServerMatch(players: { Types.ParsedPlayerD
 		return false
 	end
 
-	local playersByServer, partyMapping, removalFailures = MatchmakingEngine.ProcessPlayerRemoval(players, queueKey)
+	local playersByServer, partyMapping, removalFailures, localPlayersRemoved = MatchmakingEngine.ProcessPlayerRemoval(players, queueKey)
 
-	MatchmakingEngine.UpdateLocalQueueCount(players, queueKey)
+	MatchmakingEngine.UpdateLocalQueueCount(localPlayersRemoved, queueKey)
 
 	if removalFailures > 0 then
 		warn("CreateCrossServerMatch():", removalFailures, "queue removal failures occurred")
@@ -267,7 +265,7 @@ function MatchmakingEngine.LockAllPlayers(players: { Types.ParsedPlayerData }): 
 			return lockMap:UpdateAsync(
 				tostring(playerData.UserId),
 				function(oldData): any
-					if oldData and oldData.Status == "InMatch" and oldData.MatchId ~= MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
+					if oldData and oldData.Status == "InMatch" then
 						return nil
 					end
 
@@ -299,11 +297,12 @@ end
 -- ProcessPlayerRemoval(): Removes players from queue and organizes them by server WITH party info
 -- @param players: { Types.ParsedPlayerData }
 -- @param queueKey: Types.QueueKey
--- @return ({ [string]: { number } }, Types.PartyMap, number): Players by server, party mapping, removal failures
-function MatchmakingEngine.ProcessPlayerRemoval(players: { Types.ParsedPlayerData }, queueKey: Types.QueueKey): ({ [string]: { number } }, Types.PartyMap, number)
+-- @return ({ [string]: { number } }, Types.PartyMap, number): Players by server, party mapping, removal failures, local players removed
+function MatchmakingEngine.ProcessPlayerRemoval(players: { Types.ParsedPlayerData }, queueKey: Types.QueueKey): ({ [string]: { number } }, Types.PartyMap, number, number)
 	local playersByServer = {}
     local partyMapping: Types.PartyMap = {}
 	local removalFailures = 0
+	local localPlayersRemoved = 0
 	local queue = MatchmakingEngine.Modules.QueueManager.GetQueue(queueKey.Mode, queueKey.SubMode)
 
 	for _, playerData in players do
@@ -349,6 +348,8 @@ function MatchmakingEngine.ProcessPlayerRemoval(players: { Types.ParsedPlayerDat
 			continue
 		end
 
+		localPlayersRemoved += 1
+
 		MatchmakingEngine.Modules.SharedData.playerQueueKeys[playerData.UserId][queueKey.Mode][queueKey.SubMode] = nil
 
 		if next(MatchmakingEngine.Modules.SharedData.playerQueueKeys[playerData.UserId][queueKey.Mode]) == nil then
@@ -360,25 +361,13 @@ function MatchmakingEngine.ProcessPlayerRemoval(players: { Types.ParsedPlayerDat
 		end
 	end
 
-	return playersByServer, partyMapping, removalFailures
+	return playersByServer, partyMapping, removalFailures, localPlayersRemoved
 end
 
 -- UpdateLocalQueueCount(): Updates the local queue count after match creation
--- @param players: { ParsedPlayerData }
+-- @param localPlayersRemoved: number
 -- @param queueKey: Types.QueueKey
-function MatchmakingEngine.UpdateLocalQueueCount(players: { Types.ParsedPlayerData }, queueKey: Types.QueueKey): ()
-	local localPlayersRemoved = 0
-
-	for _, playerData in players do
-		if playerData.ServerId == MatchmakingEngine.Modules.Settings.Information.SERVER_ID then
-			localPlayersRemoved += 1
-		end
-	end
-
-	if not MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode] then
-		MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode] = {}
-	end
-
+function MatchmakingEngine.UpdateLocalQueueCount(localPlayersRemoved: number, queueKey: Types.QueueKey): ()
 	MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode][queueKey.SubMode] = math.max(0, (MatchmakingEngine.Modules.SharedData.localQueueCounts[queueKey.Mode][queueKey.SubMode] or 0) - localPlayersRemoved)
 end
 

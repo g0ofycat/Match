@@ -78,7 +78,7 @@ function QueueManager.QueuePlayer(playerOrList: Player | { Player }, mode: strin
 	for _, player in players do
 		if QueueManager.Modules.SharedData.playerQueueKeys[player.UserId] then
 			warn("QueuePlayer(): " .. player.Name .. " is already in a queue")
-			return
+			continue
 		end
 
 		local playerContinent = QueueManager.Modules.PlayerLocation.GetPlayerContinent(player)
@@ -381,11 +381,7 @@ end
 -- GetLockMap(): Returns MatchLocks
 -- @return MemoryStoreSortedMap
 function QueueManager.GetLockMap(): MemoryStoreSortedMap
-	if not QueueManager.Modules.SharedData._lockMap then
-		QueueManager.Modules.SharedData._lockMap = MemoryStoreService:GetSortedMap("MatchLocks")
-	end
-
-	return QueueManager.Modules.SharedData._lockMap :: MemoryStoreSortedMap
+	return MemoryStoreService:GetSortedMap("MatchLocks")
 end
 
 -- RunHeartbeat(): Runs cache cleanup on heartbeat
@@ -401,32 +397,6 @@ function QueueManager.RunHeartbeat(): ()
 
 		if next(QueueManager.Modules.SharedData.queueCache[mode]) == nil then
 			QueueManager.Modules.SharedData.queueCache[mode] = nil
-		end
-	end
-
-	if QueueManager.Modules.SharedData.crossServerData then
-		for mode, subModes in QueueManager.Modules.SharedData.crossServerData do
-			for subMode, queueData in subModes do
-				local expired = {}
-
-				for serverId, serverData in queueData do
-					if now - serverData.Timestamp > QueueManager.Modules.Settings.Matches.CROSS_SERVER_DATA_TTL then
-						table.insert(expired, serverId)
-					end
-				end
-
-				for _, serverId in expired do
-					queueData[serverId] = nil
-				end
-
-				if not next(queueData) then
-					QueueManager.Modules.SharedData.crossServerData[mode][subMode] = nil
-				end
-			end
-
-			if next(QueueManager.Modules.SharedData.crossServerData[mode]) == nil then
-				QueueManager.Modules.SharedData.crossServerData[mode] = nil
-			end
 		end
 	end
 

@@ -53,11 +53,6 @@ export type CrossServerPlayer = {
 	QueueKey: QueueKey
 }
 
-export type CrossServerData = {
-	Players: { CrossServerPlayer },
-	Timestamp: number
-}
-
 export type PartyMap = {
     [string]: {
         [string]:
@@ -84,8 +79,6 @@ export type MatchData = {
 	localQueueCounts: { [string]: { [string]: number } }, -- // Mode -> SubMode -> Count
 	isProcessingMatch: { [string]: { [string]: boolean } }, -- // Mode -> SubMode -> Processing Status
 
-	crossServerData: { [string]: { [string]: { [string]: CrossServerData } } }, -- // Mode -> SubMode -> ServerId -> Data
-
 	matchmakingTasks: { [string]: { [string]: thread } }, -- // Mode -> SubMode -> Thread
 
 	queueCache: { [string]: { [string]: QueueCacheEntry } }, -- // Mode -> SubMode -> Cache Entry
@@ -93,7 +86,6 @@ export type MatchData = {
 
 	lastCacheCleanup: number,
 	heartbeatConnection: RBXScriptConnection?,
-	_lockMap: MemoryStoreSortedMap?,
 	signal: any
 }
 
