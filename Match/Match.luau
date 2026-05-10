@@ -22,24 +22,17 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 --=========================
--- // PATHS
---=========================
-
-local HelpersPath = script.Parent.modules.helpers
-local SubModulesPath = script.Parent.modules.sub_modules
-
---=========================
 -- // TYPES
 --=========================
 
-local Types = require(HelpersPath.Types)
+local Types = require("./modules/helpers/Types")
 
 --=========================
 -- // HELPERS
 --=========================
 
 Match.Helpers = {
-    Settings = require(HelpersPath.Settings)
+    Settings = require("./modules/helpers/Settings")
 }
 
 --=========================
@@ -47,11 +40,12 @@ Match.Helpers = {
 --=========================
 
 Match.SubModules = {
-	SharedData = require(SubModulesPath.SharedData),
-    QueueManager = require(SubModulesPath.QueueManager),
-    CrossServerManager = require(SubModulesPath.CrossServerManager),
-    MatchmakingEngine = require(SubModulesPath.MatchmakingEngine),
-    PartyManager = require(SubModulesPath.PartyManager)
+	SharedData = require("./modules/sub_modules/SharedData"),
+    QueueManager = require("./modules/sub_modules/QueueManager"),
+    CrossServerManager = require("./modules/sub_modules/CrossServerManager"),
+    MatchmakingEngine = require("./modules/sub_modules/MatchmakingEngine"),
+    PartyManager = require("./modules/sub_modules/PartyManager"),
+	TeleportHandler = require("./modules/sub_modules/TeleportHandler")
 }
 
 --=========================
@@ -135,6 +129,13 @@ end
 -- @return boolean: If the player is queued or not
 function Match.IsPlayerQueued(player: Player, mode: string?, subMode: string?): boolean
 	return Match.SubModules.QueueManager.IsPlayerQueued(player, mode, subMode)
+end
+
+-- GetPlayerPreviousMatches(): Gets a players previous matches within the PREV_MATCHES_TTL
+-- @param player: The player to get previous matches for
+-- @return Types.PreviousMatchData?: The previous match data if found, otherwise nil
+function Match.GetPlayerPreviousMatches(player: Player): Types.PreviousMatchData?
+	return Match.SubModules.TeleportHandler.GetPlayerPreviousMatches(player)
 end
 
 -- GetQueuedPlayers(): Get all of the queued players in a subMode's mode

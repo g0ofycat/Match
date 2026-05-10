@@ -1,3 +1,15 @@
+--[[
+	MIT License
+
+	Copyright © 2025 g0ofycat
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+]]
+
 --!strict
 
 local PlayerLocation = {}
@@ -61,8 +73,6 @@ PlayerLocation.continentMap = {
 	["AQ"] = "AN"
 }
 
-PlayerLocation.continentCache = {}
-
 --=========================
 -- // PUBLIC API
 --=========================
@@ -71,42 +81,17 @@ PlayerLocation.continentCache = {}
 -- @param player: The player to get the continent of
 -- @return string?: The continent (e.x. NA, SA, EU, etc.) on success, nil on failure
 function PlayerLocation.GetPlayerContinent(player: Player): string?
-	if not player then
-		return nil
-	end
-
-	if PlayerLocation.continentCache[player.UserId] then
-		print("GetPlayerContinent(): Using cached continent for " .. player.Name .. ": " .. PlayerLocation.continentCache[player.UserId])
-		return PlayerLocation.continentCache[player.UserId]
-	end
-
 	local success, countryCode = pcall(function()
 		return LocalizationService:GetCountryRegionForPlayerAsync(player)
 	end)
 
 	if success and countryCode then
 		local continent = PlayerLocation.continentMap[string.upper(countryCode)] or "Unknown"
-
-		PlayerLocation.continentCache[player.UserId] = continent
-
 		return continent
 	else
-		print("GetPlayerContinent(): Failed to get country code for player.")
+		warn("GetPlayerContinent(): Failed to get country code for player.")
 		return nil
 	end
 end
-
---=========================
--- // CLEANUP
---=========================
-
--- CleanupInit(): Connect all events related to cleanup
-function PlayerLocation.CleanupInit(): ()
-	game.Players.PlayerRemoving:Connect(function(player)
-		PlayerLocation.continentCache[player.UserId] = nil
-	end)
-end
-
-PlayerLocation.CleanupInit()
 
 return PlayerLocation

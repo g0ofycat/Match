@@ -1,3 +1,15 @@
+--[[
+	MIT License
+
+	Copyright © 2025 g0ofycat
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+]]
+
 --!strict
 
 local MatchmakingEngine = {}
@@ -13,18 +25,18 @@ local HttpService = game:GetService("HttpService")
 -- // TYPES
 --=========================
 
-local Types = require(script.Parent.Parent.helpers.Types)
+local Types = require("../helpers/Types")
 
 --=========================
 -- // MODULES
 --=========================
 
 MatchmakingEngine.Modules = {
-	Settings = require(script.Parent.Parent.helpers.Settings),
-	SharedData = require(script.Parent.SharedData),
-	QueueManager = require(script.Parent.QueueManager),
-	CrossServerManager = require(script.Parent.CrossServerManager),
-	TeleportHandler = require(script.Parent.TeleportHandler)
+	Settings = require("../helpers/Settings"),
+	SharedData = require("./SharedData"),
+	QueueManager = require("./QueueManager"),
+	CrossServerManager = require("./CrossServerManager"),
+	TeleportHandler = require("./TeleportHandler")
 }
 
 --=========================
@@ -435,7 +447,7 @@ function MatchmakingEngine.FormMatchFromUnits(units: { { Types.ParsedPlayerData 
 	if #validUnits == 0 then return nil end
 
 	table.sort(validUnits, function(a, b)
-		return MatchmakingEngine.GetAverageJoinTime(a) < MatchmakingEngine.GetAverageJoinTime(b) :: number
+		return MatchmakingEngine.GetAverageJoinTime(a) < MatchmakingEngine.GetAverageJoinTime(b)
 	end)
 
 	for startIdx = 1, #validUnits do
@@ -472,7 +484,7 @@ function MatchmakingEngine.BuildMatchFromSeed(units: { { Types.ParsedPlayerData 
 	end
 
 	local seedWaitTime = currentTime - oldestJoinTime
-    local allowedSpread = MatchmakingEngine.GetMaxSpreadForWaitTime(seedWaitTime) :: number
+    local allowedSpread = MatchmakingEngine.GetMaxSpreadForWaitTime(seedWaitTime)
 
 	local seedELO = MatchmakingEngine.GetAverageELO(seedUnit)
 
@@ -481,7 +493,7 @@ function MatchmakingEngine.BuildMatchFromSeed(units: { { Types.ParsedPlayerData 
 	for i, unit in units do
 		if i == seedIdx then continue end
 
-		local avgELO = MatchmakingEngine.GetAverageELO(unit) :: number
+		local avgELO = MatchmakingEngine.GetAverageELO(unit)
 		local eloDiff = math.abs(avgELO - seedELO)
 
 		if eloDiff <= allowedSpread * 2 then
@@ -634,8 +646,7 @@ end
 function MatchmakingEngine.StartMatchmaking(): ()
 	for _, mode in MatchmakingEngine.Modules.Settings.Modes do
 		for subModeKey, _ in MatchmakingEngine.Modules.Settings.SubModes do
-            local subMode = subModeKey :: string
-            MatchmakingEngine.CreateMatchmakingThread(mode, subMode)
+            MatchmakingEngine.CreateMatchmakingThread(mode, subModeKey :: string)
         end
 	end
 end

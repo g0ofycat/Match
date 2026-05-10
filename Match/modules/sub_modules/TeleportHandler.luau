@@ -1,3 +1,15 @@
+--[[
+	MIT License
+
+	Copyright © 2025 g0ofycat
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+]]
+
 --!strict
 
 local TeleportHandler = {}
@@ -8,21 +20,24 @@ local TeleportHandler = {}
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
+local MemoryStoreService = game:GetService("MemoryStoreService")
 
 --=========================
 -- // TYPES
 --=========================
 
-local Types = require(script.Parent.Parent.helpers.Types)
+local Types = require("../helpers/Types")
 
 --=========================
 -- // MODULES
 --=========================
 
 TeleportHandler.Modules = {
-	Settings = require(script.Parent.Parent.helpers.Settings),
-	QueueManager = require(script.Parent.QueueManager)
+	Settings = require("../helpers/Settings"),
+	QueueManager = require("./QueueManager")
 }
+
+local PreviousMatches = MemoryStoreService:GetSortedMap("PreviousMatches")
 
 --=========================
 -- // PUBLIC API
@@ -67,6 +82,14 @@ function TeleportHandler.HandleTeleportRequest(data: Types.TeleportRequestData):
 
 		if success then
 			print(`HandleTeleportRequest(): Successfully teleported {#playersToTeleport} players on attempt {attempt}`)
+			for _, userId in data.PlayersForServer[serverId] do
+				PreviousMatches:SetAsync(tostring(userId), {
+					MatchId = data.MatchId,
+					Mode = data.Mode,
+					SubMode = data.SubMode,
+					Timestamp = os.time()
+				}, TeleportHandler.Modules.Settings.Matches.PREV_MATCHES_TTL)
+			end
 			return
 		else
 			print(`HandleTeleportRequest(): Attempt {attempt} failed: {err}, retrying {#playersToTeleport} players`)
@@ -125,6 +148,21 @@ function TeleportHandler.UnlockPlayers(playerIds: { number }): ()
 			lockMap:RemoveAsync(tostring(userId))
 		end)
 	end
+end
+
+-- GetPlayerPreviousMatches(): Gets a players previous matches within the PREV_MATCHES_TTL
+-- @param player: The player to get previous matches for
+-- @return Types.PreviousMatchData?: The previous match data if found, otherwise nil
+function TeleportHandler.GetPlayerPreviousMatches(player: Player): Types.PreviousMatchData?
+    local success, result = pcall(function()
+        return PreviousMatches:GetAsync(tostring(player.UserId))
+    end)
+
+    if success and result then
+        return result
+    end
+
+    return nil
 end
 
 return TeleportHandler
